@@ -13,7 +13,7 @@ export default async function ProjectsPage({
   return (
     <Shell>
       <h1>Проекты</h1>
-      <p className="lead">Один проект — одна команда бренда.</p>
+      <p className="lead">Один проект — одна команда. Внутри календарь, идеи и аккаунты.</p>
       {error ? <div className="error">{error}</div> : null}
       <p>
         <a className="pri" href="/projects/new">

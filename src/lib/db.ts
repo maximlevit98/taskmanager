@@ -32,6 +32,72 @@ create unique index if not exists one_approver_per_project
   on project_members (project_id)
   where role = 'approver';
 
+create table if not exists accounts (
+  id uuid primary key,
+  project_id uuid not null references projects(id) on delete cascade,
+  platform text not null,
+  handle text not null,
+  kind text not null default '',
+  owner_user_id uuid references users(id) on delete set null,
+  connected boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists units (
+  id uuid primary key,
+  project_id uuid not null references projects(id) on delete cascade,
+  title text not null,
+  body text not null default '',
+  content_type text,
+  account_id uuid references accounts(id) on delete set null,
+  slot_at timestamptz,
+  tone text not null default 'sand',
+  status text not null default 'idea',
+  gate text not null default 'none',
+  version int not null default 1,
+  approved_version int,
+  approved_by uuid references users(id),
+  approved_at timestamptz,
+  return_reason text,
+  outcome text,
+  outcome_reason text,
+  created_by uuid not null references users(id),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists unit_people (
+  unit_id uuid not null references units(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  task text not null default '',
+  primary key (unit_id, user_id)
+);
+
+create table if not exists unit_comments (
+  id uuid primary key,
+  unit_id uuid not null references units(id) on delete cascade,
+  user_id uuid not null references users(id),
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists unit_links (
+  id uuid primary key,
+  unit_id uuid not null references units(id) on delete cascade,
+  url text not null,
+  label text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists unit_events (
+  id uuid primary key,
+  unit_id uuid not null references units(id) on delete cascade,
+  user_id uuid references users(id),
+  kind text not null,
+  note text not null default '',
+  version int not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists project_invites (
   id uuid primary key,
   project_id uuid not null references projects(id) on delete cascade,
@@ -72,12 +138,34 @@ export function ensureDb() {
   return ready;
 }
 
+export type Sql = <T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[],
+) => Promise<QueryResult<T>>;
+
 export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params: unknown[] = [],
 ): Promise<QueryResult<T>> {
   await ensureDb();
   return pool.query<T>(text, params);
+}
+
+export async function transaction<T>(run: (sql: Sql) => Promise<T>): Promise<T> {
+  await ensureDb();
+  const client = await pool.connect();
+  const sql: Sql = (text, params = []) => client.query(text, params);
+  try {
+    await client.query("begin");
+    const value = await run(sql);
+    await client.query("commit");
+    return value;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export function isUniqueViolation(error: unknown) {

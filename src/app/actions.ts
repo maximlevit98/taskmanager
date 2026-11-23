@@ -64,7 +64,7 @@ export async function createProjectAction(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (name.length < 2) back("/projects/new", "Назовите проект");
   const id = await createProject(user, name);
-  redirect(`/projects/${id}`);
+  redirect(`/projects/${id}/members`);
 }
 
 async function ownerProject(projectId: string) {
@@ -72,7 +72,7 @@ async function ownerProject(projectId: string) {
   if (!user) redirect("/login");
   const project = await getProjectForUser(projectId, user.id);
   if (!project) back("/projects", "Проект не найден");
-  if (project.role !== "owner") back(`/projects/${projectId}`, "Состав меняет только владелец");
+  if (project.role !== "owner") back(`/projects/${projectId}/members`, "Состав меняет только владелец");
   return project;
 }
 
@@ -84,8 +84,8 @@ export async function addParticipantAction(formData: FormData) {
     String(formData.get("email") || ""),
     String(formData.get("role") || ""),
   );
-  if (message) back(`/projects/${projectId}`, message);
-  redirect(`/projects/${projectId}`);
+  if (message) back(`/projects/${projectId}/members`, message);
+  redirect(`/projects/${projectId}/members`);
 }
 
 export async function changeRoleAction(formData: FormData) {
@@ -93,23 +93,23 @@ export async function changeRoleAction(formData: FormData) {
   const userId = String(formData.get("userId") || "");
   const role = String(formData.get("role") || "");
   await ownerProject(projectId);
-  if (!isAssignableRole(role)) back(`/projects/${projectId}`, "Выберите роль");
+  if (!isAssignableRole(role)) back(`/projects/${projectId}/members`, "Выберите роль");
   const target = await query<{ role: string }>(
     "select role from project_members where project_id = $1 and user_id = $2",
     [projectId, userId],
   );
-  if (!target.rows[0]) back(`/projects/${projectId}`, "Участник не найден");
-  if (target.rows[0].role === "owner") back(`/projects/${projectId}`, "Роль владельца не меняется");
+  if (!target.rows[0]) back(`/projects/${projectId}/members`, "Участник не найден");
+  if (target.rows[0].role === "owner") back(`/projects/${projectId}/members`, "Роль владельца не меняется");
   try {
     await query(
       "update project_members set role = $3 where project_id = $1 and user_id = $2",
       [projectId, userId, role],
     );
   } catch (error) {
-    if (isUniqueViolation(error)) back(`/projects/${projectId}`, "Согласующий в проекте уже назначен");
+    if (isUniqueViolation(error)) back(`/projects/${projectId}/members`, "Согласующий в проекте уже назначен");
     throw error;
   }
-  redirect(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}/members`);
 }
 
 export async function removeMemberAction(formData: FormData) {
@@ -120,12 +120,12 @@ export async function removeMemberAction(formData: FormData) {
     "select role from project_members where project_id = $1 and user_id = $2",
     [projectId, userId],
   );
-  if (target.rows[0]?.role === "owner") back(`/projects/${projectId}`, "Владельца нельзя убрать");
+  if (target.rows[0]?.role === "owner") back(`/projects/${projectId}/members`, "Владельца нельзя убрать");
   await query("delete from project_members where project_id = $1 and user_id = $2", [
     projectId,
     userId,
   ]);
-  redirect(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}/members`);
 }
 
 export async function cancelInviteAction(formData: FormData) {
@@ -133,5 +133,5 @@ export async function cancelInviteAction(formData: FormData) {
   const inviteId = String(formData.get("inviteId") || "");
   await ownerProject(projectId);
   await query("delete from project_invites where id = $1 and project_id = $2", [inviteId, projectId]);
-  redirect(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}/members`);
 }

@@ -10,7 +10,7 @@ export default async function NewProjectPage({
   return (
     <Shell>
       <h1>Новый проект</h1>
-      <p className="lead">Вы станете владельцем и сможете добавить участников с ролями.</p>
+      <p className="lead">Вы станете владельцем. Дальше — участники, один согласующий и первая единица.</p>
       <form className="stack" action={createProjectAction}>
         {error ? <div className="error">{error}</div> : null}
         <label>
