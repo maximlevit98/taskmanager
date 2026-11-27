@@ -5,18 +5,16 @@ import { getUser } from "@/lib/auth";
 import {
   addComment,
   changeSlot,
-  createAccount,
   decide,
   markOutcome,
   saveCompose,
   saveLink,
   saveUnit,
   sendForApproval,
-  setAccountConnected,
   withdrawIdea,
 } from "@/lib/content";
 import { parseSlot } from "@/lib/dates";
-import { getProjectForUser, listMembers } from "@/lib/projects";
+import { getProjectForUser } from "@/lib/projects";
 
 function withError(path: string, message: string): never {
   const join = path.includes("?") ? "&" : "?";
@@ -50,7 +48,6 @@ export async function createUnitAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
   const { user } = await team(projectId);
   const intent = formData.get("intent") === "idea" ? "idea" : "slot";
-  const members = await listMembers(projectId);
   const people = formData.getAll("person").map((value) => {
     const userId = String(value);
     return { userId, task: String(formData.get(`task-${userId}`) || "") };
@@ -60,7 +57,6 @@ export async function createUnitAction(formData: FormData) {
   const result = await saveUnit({
     projectId,
     userId: user.id,
-    memberIds: members.map((item) => item.user_id),
     ideaId: ideaId || undefined,
     intent,
     title: String(formData.get("title") || ""),
@@ -70,6 +66,7 @@ export async function createUnitAction(formData: FormData) {
     slotAt: intent === "slot" ? parseSlot(String(formData.get("slot") || "")) : null,
     tone: String(formData.get("tone") || "sand"),
     people,
+    initialPeople: formData.getAll("initialPerson").map(String),
   });
   if ("error" in result) withError(failTo, result.error || "Не получилось сохранить");
   if (intent === "idea") redirect(`/projects/${projectId}/ideas`);
@@ -182,33 +179,4 @@ export async function markOutcomeAction(formData: FormData) {
   const message = await markOutcome(projectId, user.id, unitId, version, attempt, outcome, String(formData.get("reason") || ""));
   if (message) withError(back, message);
   redirect(back);
-}
-
-export async function addAccountAction(formData: FormData) {
-  const projectId = String(formData.get("projectId") || "");
-  await team(projectId);
-  const owner = String(formData.get("ownerUserId") || "");
-  const members = await listMembers(projectId);
-  const message = await createAccount({
-    projectId,
-    platform: String(formData.get("platform") || ""),
-    handle: String(formData.get("handle") || ""),
-    kind: String(formData.get("kind") || ""),
-    ownerUserId: members.some((item) => item.user_id === owner) ? owner : null,
-    connected: formData.get("connected") === "on",
-  });
-  if (message) withError(`/projects/${projectId}/connections`, message);
-  redirect(`/projects/${projectId}/connections`);
-}
-
-export async function toggleAccountAction(formData: FormData) {
-  const projectId = String(formData.get("projectId") || "");
-  await team(projectId);
-  const message = await setAccountConnected(
-    projectId,
-    String(formData.get("accountId") || ""),
-    formData.get("connected") === "yes",
-  );
-  if (message) withError(`/projects/${projectId}/connections`, message);
-  redirect(`/projects/${projectId}/connections`);
 }

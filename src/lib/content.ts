@@ -1,5 +1,5 @@
 import type { Role } from "./auth";
-import { isContentType, isPlatform, isTone } from "./catalog";
+import { isContentType, isTone } from "./catalog";
 import { query, transaction, type Sql } from "./db";
 
 export type Person = { user_id: string; name: string; task: string };
@@ -218,42 +218,6 @@ async function addEvent(sql: Sql, unitId: string, userId: string, kind: string, 
   );
 }
 
-export async function createAccount(input: {
-  projectId: string;
-  platform: string;
-  handle: string;
-  kind: string;
-  ownerUserId: string | null;
-  connected: boolean;
-}) {
-  if (!isPlatform(input.platform)) return "Выберите площадку";
-  const handle = input.handle.trim();
-  if (handle.length < 1) return "Укажите аккаунт";
-  await query(
-    `insert into accounts (id, project_id, platform, handle, kind, owner_user_id, connected)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      crypto.randomUUID(),
-      input.projectId,
-      input.platform,
-      handle,
-      input.kind.trim(),
-      input.ownerUserId,
-      input.connected,
-    ],
-  );
-  return null;
-}
-
-export async function setAccountConnected(projectId: string, accountId: string, connected: boolean) {
-  const result = await query("update accounts set connected = $3 where id = $1 and project_id = $2", [
-    accountId,
-    projectId,
-    connected,
-  ]);
-  return result.rowCount ? null : "Аккаунт не найден";
-}
-
 function cleanPeople(people: { userId: string; task: string }[]) {
   const seen = new Set<string>();
   return people.filter((person) => {
@@ -266,8 +230,8 @@ function cleanPeople(people: { userId: string; task: string }[]) {
 export async function saveUnit(input: {
   projectId: string;
   userId: string;
-  memberIds: string[];
   ideaId?: string;
+  initialPeople: string[];
   intent: "idea" | "slot";
   title: string;
   body: string;
@@ -280,7 +244,6 @@ export async function saveUnit(input: {
   const title = input.title.trim();
   if (title.length < 2) return { error: "Назовите единицу" };
   const tone = isTone(input.tone) ? input.tone : "sand";
-  const people = cleanPeople(input.people).filter((person) => input.memberIds.includes(person.userId));
   const body = input.body.trim();
 
   if (input.intent === "slot") {
@@ -295,6 +258,11 @@ export async function saveUnit(input: {
   }
 
   const id = await transaction(async (sql) => {
+    // Membership changes lock this same project. Keep the roster stable while applying assignment edits.
+    await sql("select id from projects where id = $1 for key share", [input.projectId]);
+    const members = await sql<{ user_id: string }>("select user_id from project_members where project_id = $1", [input.projectId]);
+    const memberIds = new Set(members.rows.map((member) => member.user_id));
+    const people = cleanPeople(input.people).filter((person) => memberIds.has(person.userId));
     let unitId = input.ideaId || "";
     if (unitId) {
       const existing = await sql<{ status: string }>(
@@ -312,7 +280,10 @@ export async function saveUnit(input: {
           [unitId, title, body, input.contentType, input.accountId, input.slotAt, tone],
         );
       }
-      await sql("delete from unit_people where unit_id = $1", [unitId]);
+      // Only a previously editable assignment can be unchecked on this form.
+      const selected = new Set(people.map((person) => person.userId));
+      const removed = input.initialPeople.filter((id) => memberIds.has(id) && !selected.has(id));
+      await sql("delete from unit_people where unit_id = $1 and user_id = any($2::uuid[])", [unitId, removed]);
     } else {
       unitId = crypto.randomUUID();
       if (input.intent === "idea") {
@@ -331,7 +302,8 @@ export async function saveUnit(input: {
       await addEvent(sql, unitId, input.userId, input.intent === "idea" ? "idea" : "created", "", 1);
     }
     for (const person of people) {
-      await sql("insert into unit_people (unit_id, user_id, task) values ($1, $2, $3)", [
+      await sql(`insert into unit_people (unit_id, user_id, task) values ($1, $2, $3)
+                 on conflict (unit_id, user_id) do update set task = excluded.task`, [
         unitId,
         person.userId,
         person.task.trim(),

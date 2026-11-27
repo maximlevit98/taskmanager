@@ -25,6 +25,15 @@ jobs:
         run: |
           cat > "$RUNNER_TEMP/compose.ci.yml" <<'YAML'
           services:
+            mail:
+              image: axllent/mailpit:v1.21.8
+              ports:
+                - "127.0.0.1:8025:8025"
+            app:
+              environment:
+                INVITE_SMTP_URL: smtp://mail:1025
+                INVITE_FROM: ci@example.test
+                APP_PUBLIC_URL: http://127.0.0.1:3010
             db:
               ports:
                 - "127.0.0.1::5432"
@@ -78,6 +87,9 @@ jobs:
           fi
           npm ci
           node --test "${suites[@]}"
+
+      - name: Verify session startup, HTTP and HTTPS cookies
+        run: bash tests/session-environments.sh
 
       - name: Show service logs on failure
         if: failure()

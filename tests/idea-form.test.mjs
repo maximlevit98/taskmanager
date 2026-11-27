@@ -28,6 +28,7 @@ const idea = {
   people: [
     { ...members[0], task: "Написать анонс" },
     { ...members[1], task: "Нарисовать обложку" },
+    { user_id: "former", name: "Катя", task: "Собрать исходники" },
   ],
 };
 
@@ -42,7 +43,7 @@ for (const intent of ["idea", "slot"]) {
       members,
       accounts: [{ id: "account-1", platform: "telegram", handle: "brand", kind: "" }],
       defaultSlot: "2026-12-01T10:00",
-      idea: ideaFormValues(idea),
+      idea: ideaFormValues(idea, members),
       saveAction: async (data) => { submissions.push(data); },
     })));
 
@@ -50,6 +51,15 @@ for (const intent of ["idea", "slot"]) {
     const editorTask = form.elements.namedItem("task-editor");
     assert.equal(form.elements.namedItem("tone").value, "mint");
     assert.deepEqual(new FormData(form).getAll("person"), ["editor", "artist"]);
+    assert.match(form.querySelector('[aria-label="Архивные поручения"]').textContent, /Катя — Собрать исходники/);
+    assert.equal(form.elements.namedItem("task-former"), null);
+    assert.deepEqual(new FormData(form).getAll("initialPerson"), ["editor", "artist"]);
+    const artist = form.querySelector('input[type="checkbox"][value="artist"]');
+    await act(async () => artist.click());
+    const unchecked = new FormData(form);
+    assert.deepEqual(unchecked.getAll("initialPerson"), ["editor", "artist"]);
+    assert.deepEqual(unchecked.getAll("person"), ["editor"]);
+    await act(async () => artist.click());
     assert.equal(editorTask.value, "Написать анонс");
     assert.equal(form.elements.namedItem("task-artist").value, "Нарисовать обложку");
 
