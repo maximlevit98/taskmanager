@@ -124,7 +124,11 @@ export async function changeSlotAction(formData: FormData) {
   const back = safeReturn(projectId, String(formData.get("returnTo") || ""), `/projects/${projectId}?unit=${unitId}`);
   const slotAt = parseSlot(String(formData.get("slot") || ""));
   if (!slotAt) withError(back, "Поставьте время слота");
-  const message = await changeSlot(projectId, user.id, unitId, slotAt);
+  const version = Number(formData.get("expectedVersion"));
+  const attempt = Number(formData.get("expectedPublicationAttempt"));
+  const intent = formData.get("rescheduleIntent");
+  if (intent !== "reschedule" && intent !== "retry") withError(back, "Обновите страницу для переноса слота");
+  const message = await changeSlot(projectId, user.id, unitId, slotAt, version, attempt, intent);
   if (message) withError(back, message);
   redirect(back);
 }

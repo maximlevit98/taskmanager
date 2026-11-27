@@ -204,7 +204,7 @@ export function workFor(unit: Unit, role: Role, projectId: string): WorkItem[] {
       kind: "failed",
       text: unit.outcome_reason
         ? `Не вышло: ${unit.outcome_reason}`
-        : "Не вышло. Закройте новой отметкой или новым временем.",
+        : "Не вышло. Запланируйте повторную попытку.",
       href: open,
     });
   }
@@ -470,11 +470,28 @@ export async function addComment(projectId: string, userId: string, unitId: stri
   return null;
 }
 
-export async function changeSlot(projectId: string, userId: string, unitId: string, slotAt: string) {
+export function rescheduleIntent(unit: Pick<Unit, "status" | "outcome" | "slot_at">) {
+  if (!unit.slot_at || unit.status === "idea" || unit.status === "pulled" || unit.status === "out") return null;
+  if (unit.status === "failed" && unit.outcome === "failed") return "retry";
+  return unit.outcome === null && unit.status !== "failed" ? "reschedule" : null;
+}
+
+export async function changeSlot(
+  projectId: string,
+  userId: string,
+  unitId: string,
+  slotAt: string,
+  expectedVersion: number,
+  expectedAttempt: number,
+  intent: "reschedule" | "retry",
+) {
   return transaction(async (sql) => {
     const unit = await lockUnit(sql, projectId, unitId);
-    if (!unit || unit.status === "idea" || unit.status === "pulled") return "Сначала поставьте единицу в календарь";
-    const failed = unit.outcome === "failed";
+    const currentIntent = unit && rescheduleIntent(unit);
+    if (!currentIntent || currentIntent !== intent || unit.version !== expectedVersion || unit.publication_attempt !== expectedAttempt) {
+      return transitionConflict;
+    }
+    const failed = intent === "retry";
     const nextStatus = unit.gate === "yes" ? "waiting" : unit.status;
     await sql(
       `update units set slot_at = $2, publication_attempt = publication_attempt + 1,
