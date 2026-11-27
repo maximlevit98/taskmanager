@@ -58,8 +58,7 @@ export default async function ConnectionsPage({
                 <details className="resource-details">
                   <summary>Удалить аккаунт</summary>
                   {counts.has(account.id) ? (
-                    <p>Связанных материалов: {counts.get(account.id)}. Для удаления перенесите их на другой аккаунт.
-                      Также можно отключить аккаунт в форме редактирования.</p>
+                    <p>Связанных материалов: {counts.get(account.id)}. Чтобы сохранить историю публикаций, откройте «Редактировать аккаунт» и снимите отметку «Подключён». Слоты, согласования и отметки выхода сохранятся.</p>
                   ) : (
                     <form action={deleteAccountAction} className="stack">
                       <input type="hidden" name="projectId" value={id} />

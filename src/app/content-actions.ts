@@ -14,7 +14,7 @@ import {
   withdrawIdea,
 } from "@/lib/content";
 import { parseSlot } from "@/lib/dates";
-import { getProjectForUser, listMembers } from "@/lib/projects";
+import { getProjectForUser } from "@/lib/projects";
 
 function withError(path: string, message: string): never {
   const join = path.includes("?") ? "&" : "?";
@@ -48,7 +48,6 @@ export async function createUnitAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
   const { user } = await team(projectId);
   const intent = formData.get("intent") === "idea" ? "idea" : "slot";
-  const members = await listMembers(projectId);
   const people = formData.getAll("person").map((value) => {
     const userId = String(value);
     return { userId, task: String(formData.get(`task-${userId}`) || "") };
@@ -58,7 +57,6 @@ export async function createUnitAction(formData: FormData) {
   const result = await saveUnit({
     projectId,
     userId: user.id,
-    memberIds: members.map((item) => item.user_id),
     ideaId: ideaId || undefined,
     intent,
     title: String(formData.get("title") || ""),

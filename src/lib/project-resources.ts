@@ -101,7 +101,7 @@ export function saveAccount(projectId: string, actor: string, accountId: string 
       const account = await accountUsage(sql, projectId, accountId);
       if (!account) return "Аккаунт не найден";
       if (account.inUse && (account.platform !== fields.platform || account.handle !== handle)) {
-        return "Сначала перенесите материалы на другой аккаунт, чтобы изменить площадку или адрес";
+        return "Площадка и адрес закреплены за материалами. Отключите аккаунт и добавьте отдельный для нового адреса";
       }
       await sql(`update accounts set platform = $2, handle = $3, kind = $4, owner_user_id = $5, connected = $6
                  where project_id = $1 and id = $7`, [...values, accountId]);
@@ -114,7 +114,7 @@ export function deleteAccount(projectId: string, actor: string, accountId: strin
   return asOwner(projectId, actor, async (sql) => {
     const account = await accountUsage(sql, projectId, accountId);
     if (!account) return "Аккаунт не найден";
-    if (account.inUse) return "У аккаунта есть связанные материалы. Отключите его или сначала перенесите материалы";
+    if (account.inUse) return "У аккаунта есть связанные материалы. Отключите аккаунт, чтобы сохранить историю публикаций";
     await sql("delete from accounts where project_id = $1 and id = $2", [projectId, accountId]);
     return null;
   });

@@ -193,3 +193,17 @@ textarea {
 .account-controls { grid-column: 1 / -1; }
 .danger { background: #882f29; color: white; border: 0; border-radius: 9px; padding: 10px 14px; cursor: pointer; }
 .project-row { flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .app:has(.resource-details, .table) {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-wrap: anywhere;
+  }
+  .app:has(.resource-details, .table) > main { min-width: 0; padding: 16px; }
+  .app:has(.resource-details, .table) :is(label, select, input) { min-width: 0; max-width: 100%; }
+  .table, .table tbody, .table tr, .table td { display: block; }
+  .table tr { margin: 10px 0; padding: 12px; border-radius: 12px; background: white; }
+  .table td { padding: 4px 0; }
+  .table td:empty { display: none; }
+  .table .inline { flex-wrap: wrap; }
+}

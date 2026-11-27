@@ -47,7 +47,7 @@ export default async function NewUnitPage({
           kind: account.kind,
         }))}
         defaultSlot={defaultSlotInput()}
-        idea={idea ? ideaFormValues(idea) : undefined}
+        idea={idea ? ideaFormValues(idea, members) : undefined}
       />
     </BrandShell>
   );
