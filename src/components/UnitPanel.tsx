@@ -9,7 +9,7 @@ import {
 import type { Role } from "@/lib/auth";
 import { contentTypes, personColor, platformLabel, typeLabel } from "@/lib/catalog";
 import type { Account, Unit } from "@/lib/content";
-import { canPublish } from "@/lib/content";
+import { canPublish, rescheduleIntent } from "@/lib/content";
 import { formatSlot, slotInputValue } from "@/lib/dates";
 
 export function UnitPanel({
@@ -27,6 +27,7 @@ export function UnitPanel({
   role: Role;
   returnTo: string;
 }) {
+  const slotIntent = rescheduleIntent(unit);
   const hidden = (
     <>
       <input type="hidden" name="projectId" value={projectId} />
@@ -162,16 +163,19 @@ export function UnitPanel({
             </button>
           </form>
         ) : null}
-        {role !== "approver" ? (
+        {role !== "approver" && slotIntent ? (
           <form className="inline wrap" action={changeSlotAction}>
             {hidden}
+            <input type="hidden" name="expectedVersion" value={unit.version} />
+            <input type="hidden" name="expectedPublicationAttempt" value={unit.publication_attempt} />
+            <input type="hidden" name="rescheduleIntent" value={slotIntent} />
             <input name="slot" type="datetime-local" defaultValue={unit.slot_at ? slotInputValue(unit.slot_at) : ""} required />
             <button className="sec" type="submit">
-              Сменить время
+              {slotIntent === "retry" ? "Запланировать повторную попытку" : "Сменить время"}
             </button>
           </form>
         ) : null}
-        <p className="muted">Смена часа «да» не снимает.</p>
+        {slotIntent && role !== "approver" ? <p className="muted">Смена часа «да» не снимает.</p> : null}
       </section>
 
       <section>

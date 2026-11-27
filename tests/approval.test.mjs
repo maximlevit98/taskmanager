@@ -195,10 +195,10 @@ test("reschedules invalidate old publication forms even after failure or a retur
   await query("update units set slot_at=$2 where id=$1", [id, original]);
   assert.equal(await decide(id, 1, true), null);
 
-  assert.equal(await api.changeSlot(project, actor, id, later), null);
+  assert.equal(await api.changeSlot(project, actor, id, later, 1, 1, "reschedule"), null);
   assert.match(await publish(id, 1, "out", 1), /Обновите страницу/);
   assert.equal(await publish(id, 1, "failed", 2), null);
-  assert.equal(await api.changeSlot(project, actor, id, original), null);
+  assert.equal(await api.changeSlot(project, actor, id, original, 1, 2, "retry"), null);
 
   for (const stale of [1, 2]) {
     for (const outcome of ["out", "failed"]) {
@@ -211,4 +211,58 @@ test("reschedules invalidate old publication forms even after failure or a retur
   assert.equal(row.outcome, null);
   assert.equal(await publish(id, 1, "out", 3), null);
   assert.deepEqual((await events(id)).map(e => e.kind), ["approved", "rescheduled", "failed", "rescheduled", "published"]);
+});
+
+async function slotState(id) {
+  return (await query(
+    `select slot_at, status, outcome, outcome_reason, version, approved_version, publication_attempt
+     from units where id = $1`, [id],
+  )).rows[0];
+}
+
+test("publication winning a race freezes the slot and rejects the queued reschedule", async () => {
+  const id = await pending();
+  assert.equal(await decide(id, 1, true), null);
+  const original = await slotState(id);
+  const move = () => api.changeSlot(project, actor, id, "2030-01-03T12:00:00Z", 1, 1, "reschedule");
+  const [published, rejected] = await contend(id, () => publish(id, 1), move);
+  assert.equal(published, null);
+  assert.match(rejected, /Обновите страницу/);
+  const closed = await slotState(id);
+  assert.deepEqual(closed, { ...original, status: "out", outcome: "out" });
+  assert.equal(api.rescheduleIntent(closed), null);
+  assert.deepEqual((await events(id)).map(e => e.kind), ["approved", "published"]);
+});
+
+test("only a fresh retry can reopen a failed attempt, and old reschedules cannot move it again", async () => {
+  const id = await pending();
+  const firstSlot = "2030-01-03T12:00:00Z";
+  const secondSlot = "2030-01-04T12:00:00Z";
+  const move = (slot, attempt, intent) => api.changeSlot(project, actor, id, slot, 1, attempt, intent);
+  assert.equal(await decide(id, 1, true), null);
+  assert.equal(await publish(id, 1, "failed"), null);
+  const failed = await slotState(id);
+  assert.equal(api.rescheduleIntent(failed), "retry");
+  assert.match(await move(firstSlot, 1, "reschedule"), /Обновите страницу/);
+  assert.deepEqual(await slotState(id), failed);
+  assert.equal(await move(firstSlot, 1, "retry"), null);
+  const reopened = await slotState(id);
+  assert.equal(reopened.publication_attempt, 2);
+  assert.equal(reopened.outcome, null);
+  assert.equal(reopened.outcome_reason, null);
+  assert.equal(reopened.approved_version, 1);
+  assert.equal(api.rescheduleIntent(reopened), "reschedule");
+
+  assert.equal(await move(secondSlot, 2, "reschedule"), null);
+  assert.equal(await move(firstSlot, 3, "reschedule"), null);
+  const current = await slotState(id);
+  assert.equal(current.publication_attempt, 4);
+  assert.deepEqual(current.slot_at, reopened.slot_at);
+  assert.match(await move(secondSlot, 2, "reschedule"), /Обновите страницу/);
+  assert.equal(await publish(id, 1, "failed", 4), null);
+  const failedAgain = await slotState(id);
+  assert.match(await move(secondSlot, 1, "retry"), /Обновите страницу/);
+  assert.deepEqual(await slotState(id), failedAgain);
+  assert.deepEqual((await events(id)).map(e => e.kind),
+    ["approved", "failed", "rescheduled", "rescheduled", "rescheduled", "failed"]);
 });
