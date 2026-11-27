@@ -40,6 +40,7 @@ export function NewUnitForm({
     <form className="composer" action={saveAction}>
       <input type="hidden" name="projectId" value={projectId} />
       {idea ? <input type="hidden" name="ideaId" value={idea.id} /> : null}
+      {idea?.people.map((id) => <input key={id} type="hidden" name="initialPerson" value={id} />)}
       <section>
         <h2>1 · Название</h2>
         <input name="title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="О чём единица" required />

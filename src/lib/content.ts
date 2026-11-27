@@ -231,6 +231,7 @@ export async function saveUnit(input: {
   projectId: string;
   userId: string;
   ideaId?: string;
+  initialPeople: string[];
   intent: "idea" | "slot";
   title: string;
   body: string;
@@ -257,7 +258,7 @@ export async function saveUnit(input: {
   }
 
   const id = await transaction(async (sql) => {
-    // Membership changes lock this same project. Keep the roster stable while replacing active assignments.
+    // Membership changes lock this same project. Keep the roster stable while applying assignment edits.
     await sql("select id from projects where id = $1 for key share", [input.projectId]);
     const members = await sql<{ user_id: string }>("select user_id from project_members where project_id = $1", [input.projectId]);
     const memberIds = new Set(members.rows.map((member) => member.user_id));
@@ -279,7 +280,10 @@ export async function saveUnit(input: {
           [unitId, title, body, input.contentType, input.accountId, input.slotAt, tone],
         );
       }
-      await sql("delete from unit_people where unit_id = $1 and user_id = any($2::uuid[])", [unitId, [...memberIds]]);
+      // Only a previously editable assignment can be unchecked on this form.
+      const selected = new Set(people.map((person) => person.userId));
+      const removed = input.initialPeople.filter((id) => memberIds.has(id) && !selected.has(id));
+      await sql("delete from unit_people where unit_id = $1 and user_id = any($2::uuid[])", [unitId, removed]);
     } else {
       unitId = crypto.randomUUID();
       if (input.intent === "idea") {
@@ -298,7 +302,8 @@ export async function saveUnit(input: {
       await addEvent(sql, unitId, input.userId, input.intent === "idea" ? "idea" : "created", "", 1);
     }
     for (const person of people) {
-      await sql("insert into unit_people (unit_id, user_id, task) values ($1, $2, $3)", [
+      await sql(`insert into unit_people (unit_id, user_id, task) values ($1, $2, $3)
+                 on conflict (unit_id, user_id) do update set task = excluded.task`, [
         unitId,
         person.userId,
         person.task.trim(),

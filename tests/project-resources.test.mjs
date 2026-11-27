@@ -127,7 +127,7 @@ test("archived assignments survive stale idea submissions and promotion", async 
   const a = await fixture(), stranger = randomUUID();
   const { saveUnit } = loadTs("../src/lib/content.ts", import.meta.url);
   const draft = {
-    projectId: a.project, userId: a.owner, intent: "idea", title: "Test idea", body: "",
+    projectId: a.project, userId: a.owner, intent: "idea", title: "Test idea", body: "", initialPeople: [],
     contentType: "ig-post", accountId: a.account, slotAt: null, tone: "mint",
     people: [{ userId: a.member, task: "Former task" }, { userId: a.owner, task: "Original" }],
   };
@@ -140,7 +140,7 @@ test("archived assignments survive stale idea submissions and promotion", async 
   )).rows.map((person) => [person.user_id, person.task]));
   assert.deepEqual(await saveUnit({ ...draft, ideaId: id, people: [...stalePeople, { userId: a.owner, task: "Edited" }] }), { id });
   assert.deepEqual(await assignments(), { [a.owner]: "Edited", [a.member]: "Former task" });
-  assert.deepEqual(await saveUnit({ ...draft, ideaId: id, intent: "slot", slotAt: "2026-12-01T10:00:00Z", people: [] }), { id });
+  assert.deepEqual(await saveUnit({ ...draft, ideaId: id, intent: "slot", slotAt: "2026-12-01T10:00:00Z", initialPeople: [a.owner], people: [] }), { id });
   assert.deepEqual(await assignments(), { [a.member]: "Former task" });
   assert.equal((await query("select status from units where id = $1", [id])).rows[0].status, "work");
 });
@@ -155,4 +155,33 @@ test("published account identity is protected and disconnecting preserves the pu
   assert.deepEqual((await query(
     "select account_id, approved_version, status, outcome from units where id=$1", [unit],
   )).rows[0], { account_id: a.account, approved_version: 1, status: "out", outcome: "out" });
+});
+
+test("a title-only edit from before a member rejoined preserves their task until explicitly unchecked", async () => {
+  const a = await fixture();
+  const { getUnit, saveUnit } = loadTs("../src/lib/content.ts", import.meta.url);
+  const { ideaFormValues } = loadTs("../src/lib/idea-form.ts", import.meta.url);
+  const draft = {
+    projectId: a.project, userId: a.owner, intent: "idea", title: "Original title", body: "",
+    contentType: "", accountId: "", slotAt: null, tone: "mint", initialPeople: [],
+    people: [{ userId: a.member, task: "Keep my assignment" }, { userId: a.owner, task: "Owner task" }],
+  };
+  const { id } = await saveUnit(draft);
+  assert.equal(await api.updateMember(a.project, a.owner, a.member, null), null);
+  const original = await getUnit(a.project, id);
+  const stale = ideaFormValues(original, [{ user_id: a.owner }]);
+  assert.deepEqual(stale.archived.map((person) => person.user_id), [a.member]);
+
+  await query("insert into project_members(project_id,user_id,role) values ($1,$2,'member')", [a.project,a.member]);
+  const edit = { ...draft, ideaId: id, title: "New title", initialPeople: stale.people,
+    people: stale.people.map((userId) => ({ userId, task: stale.tasks[userId] })),
+  };
+  assert.deepEqual(await saveUnit(edit), { id });
+  const saved = await getUnit(a.project, id);
+  assert.equal(saved.title, "New title");
+  const fresh = ideaFormValues(saved, [{ user_id: a.owner }, { user_id: a.member }]);
+  assert.equal(fresh.tasks[a.member], "Keep my assignment");
+  assert.deepEqual(await saveUnit({ ...edit, initialPeople: fresh.people }), { id });
+  const afterRemoval = await getUnit(a.project, id);
+  assert.deepEqual(afterRemoval.people.map(({user_id, task}) => [user_id, task]), [[a.owner, "Owner task"]]);
 });
