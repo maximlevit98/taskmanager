@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { require as loadTsx } from "tsx/cjs/api";
-
-const { sessionConfig } = loadTsx("../src/lib/session-config.ts", import.meta.url);
+import { sessionConfig } from "../src/lib/session-config.mjs";
 
 test("HTTPS sessions require an explicit key, including behind a TLS proxy", () => {
   for (const secret of [undefined, "", "short", "local-dev-session-secret"]) {

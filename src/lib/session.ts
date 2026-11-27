@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
-import { sessionConfig } from "./session-config";
+import { sessionConfig } from "./session-config.mjs";
 
 const COOKIE = "session";
 
