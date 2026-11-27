@@ -16,5 +16,7 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+COPY src/lib/session-config.mjs ./src/lib/session-config.mjs
+COPY scripts/check-session.mjs ./scripts/check-session.mjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "--import", "./scripts/check-session.mjs", "server.js"]
