@@ -182,6 +182,7 @@ export function UnitPanel({
           <div className="stack tight">
             <form action={markOutcomeAction}>
               {hidden}
+              <input type="hidden" name="expectedVersion" value={unit.version} />
               <input type="hidden" name="outcome" value="out" />
               <button className="pri" type="submit">
                 Вышло
@@ -189,6 +190,7 @@ export function UnitPanel({
             </form>
             <form className="stack tight" action={markOutcomeAction}>
               {hidden}
+              <input type="hidden" name="expectedVersion" value={unit.version} />
               <input type="hidden" name="outcome" value="failed" />
               <input name="reason" placeholder="Почему не вышло" required />
               <button className="sec" type="submit">

@@ -296,7 +296,7 @@ export async function saveUnit(input: {
     let unitId = input.ideaId || "";
     if (unitId) {
       const existing = await sql<{ status: string }>(
-        "select status from units where id = $1 and project_id = $2",
+        "select status from units where id = $1 and project_id = $2 for update",
         [unitId, input.projectId],
       );
       if (!existing.rows[0] || existing.rows[0].status !== "idea") return "";
@@ -350,35 +350,55 @@ async function editorUnit(projectId: string, unitId: string) {
   return unit && unit.status !== "pulled" ? unit : null;
 }
 
+const transitionConflict = "Версия или состояние материала изменились. Обновите страницу.";
+
+type LockedUnit = Pick<Unit,
+  "title" | "body" | "content_type" | "account_id" | "version" | "gate" |
+  "status" | "outcome" | "approved_version" | "slot_at"
+>;
+
+async function lockUnit(sql: Sql, projectId: string, unitId: string) {
+  const result = await sql<LockedUnit>(
+    `select title, body, content_type, account_id, version, gate, status, outcome,
+            approved_version, slot_at::text
+     from units where project_id = $1 and id = $2 for update`,
+    [projectId, unitId],
+  );
+  return result.rows[0];
+}
+
 export async function saveCompose(
   projectId: string,
   userId: string,
   unitId: string,
   patch: { title?: string; body?: string; contentType?: string; accountId?: string },
 ) {
-  const unit = await editorUnit(projectId, unitId);
-  if (!unit || unit.status === "idea") return "Единица не найдена";
-  const title = (patch.title ?? unit.title).trim();
-  const body = (patch.body ?? unit.body).trim();
-  const contentType = patch.contentType ?? unit.content_type ?? "";
-  const accountId = patch.accountId ?? unit.account_id ?? "";
-  if (title.length < 2) return "Назовите единицу";
-  if (contentType && !isContentType(contentType)) return "Выберите вид контента";
-  if (accountId) {
-    const account = await query("select 1 from accounts where id = $1 and project_id = $2", [accountId, projectId]);
-    if (!account.rowCount) return "Аккаунт не из этого проекта";
-  }
-  const changed =
-    title !== unit.title ||
-    body !== unit.body ||
-    contentType !== (unit.content_type ?? "") ||
-    accountId !== (unit.account_id ?? "");
-  await transaction(async (sql) => {
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.status === "idea" || unit.status === "pulled") return "Единица не найдена";
+    const title = (patch.title ?? unit.title).trim();
+    const body = (patch.body ?? unit.body).trim();
+    const contentType = patch.contentType ?? unit.content_type ?? "";
+    const accountId = patch.accountId ?? unit.account_id ?? "";
+    if (title.length < 2) return "Назовите единицу";
+    if (contentType && !isContentType(contentType)) return "Выберите вид контента";
+    if (accountId) {
+      const account = await sql("select 1 from accounts where id = $1 and project_id = $2", [accountId, projectId]);
+      if (!account.rowCount) return "Аккаунт не из этого проекта";
+    }
+    const changed =
+      title !== unit.title ||
+      body !== unit.body ||
+      contentType !== (unit.content_type ?? "") ||
+      accountId !== (unit.account_id ?? "");
     const version = changed && (unit.gate !== "none" || unit.outcome) ? unit.version + 1 : unit.version;
     const reset = version !== unit.version;
     await sql(
       `update units set title = $2, body = $3, content_type = $4, account_id = $5,
               version = $6,
+              approved_version = case when $7 then null else approved_version end,
+              approved_by = case when $7 then null else approved_by end,
+              approved_at = case when $7 then null else approved_at end,
               gate = case when $7 then 'none' else gate end,
               status = case when $7 then 'work' else status end,
               outcome = case when $7 then null else outcome end,
@@ -388,13 +408,11 @@ export async function saveCompose(
       [unitId, title, body, contentType || null, accountId || null, version, reset],
     );
     if (reset) await addEvent(sql, unitId, userId, "edited", "Текст, вид или аккаунт изменились. «Да» снято.", version);
+    return null;
   });
-  return null;
 }
 
 export async function saveLink(projectId: string, userId: string, unitId: string, url: string, label: string) {
-  const unit = await editorUnit(projectId, unitId);
-  if (!unit || unit.status === "idea") return "Единица не найдена";
   let parsed: URL;
   try {
     parsed = new URL(url.trim());
@@ -404,11 +422,16 @@ export async function saveLink(projectId: string, userId: string, unitId: string
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "Нужна ссылка http или https";
   const href = parsed.toString();
   const caption = label.trim();
-  const previous = unit.links[0]?.url ?? "";
-  const changed = previous !== href;
-  await transaction(async (sql) => {
-    if (unit.links[0]) {
-      await sql("update unit_links set url = $2, label = $3 where id = $1", [unit.links[0].id, href, caption]);
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.status === "idea" || unit.status === "pulled") return "Единица не найдена";
+    const links = await sql<Pick<AssetLink, "id" | "url">>(
+      "select id, url from unit_links where unit_id = $1 order by created_at, id limit 1", [unitId],
+    );
+    const link = links.rows[0];
+    const changed = link?.url !== href;
+    if (link) {
+      await sql("update unit_links set url = $2, label = $3 where id = $1", [link.id, href, caption]);
     } else {
       await sql("insert into unit_links (id, unit_id, url, label) values ($1, $2, $3, $4)", [
         crypto.randomUUID(),
@@ -420,14 +443,15 @@ export async function saveLink(projectId: string, userId: string, unitId: string
     if (changed && (unit.gate !== "none" || unit.outcome)) {
       const version = unit.version + 1;
       await sql(
-        `update units set version = $2, gate = 'none', status = 'work', outcome = null, outcome_reason = null, return_reason = null
+        `update units set version = $2, gate = 'none', status = 'work', approved_version = null,
+               approved_by = null, approved_at = null, outcome = null, outcome_reason = null, return_reason = null
          where id = $1`,
         [unitId, version],
       );
       await addEvent(sql, unitId, userId, "edited", "Ссылка на файл изменилась. «Да» снято.", version);
     }
+    return null;
   });
-  return null;
 }
 
 export async function addComment(projectId: string, userId: string, unitId: string, body: string) {
@@ -445,9 +469,9 @@ export async function addComment(projectId: string, userId: string, unitId: stri
 }
 
 export async function changeSlot(projectId: string, userId: string, unitId: string, slotAt: string) {
-  const unit = await editorUnit(projectId, unitId);
-  if (!unit || unit.status === "idea") return "Сначала поставьте единицу в календарь";
-  await transaction(async (sql) => {
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.status === "idea" || unit.status === "pulled") return "Сначала поставьте единицу в календарь";
     const failed = unit.outcome === "failed";
     const nextStatus = unit.gate === "yes" ? "waiting" : unit.status;
     await sql(
@@ -459,38 +483,50 @@ export async function changeSlot(projectId: string, userId: string, unitId: stri
       [unitId, slotAt, failed, nextStatus],
     );
     await addEvent(sql, unitId, userId, "rescheduled", "Время слота изменилось. «Да» на месте.", unit.version);
+    return null;
   });
-  return null;
 }
 
 export async function withdrawIdea(projectId: string, userId: string, unitId: string) {
-  const unit = await getUnit(projectId, unitId);
-  if (!unit || unit.status !== "idea") return "Это уже не идея";
-  await transaction(async (sql) => {
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.status !== "idea") return "Это уже не идея";
     await sql("update units set status = 'pulled', slot_at = null where id = $1", [unitId]);
     await addEvent(sql, unitId, userId, "withdrawn", "", unit.version);
+    return null;
   });
-  return null;
 }
 
 export async function sendForApproval(projectId: string, userId: string, unitId: string) {
-  const unit = await editorUnit(projectId, unitId);
-  if (!unit || unit.status === "idea") return "Идею сначала делают единицей со слотом";
-  if (!unit.content_type || !unit.account_id) return "Нужны вид контента и аккаунт";
-  const approver = await query("select 1 from project_members where project_id = $1 and role = 'approver'", [projectId]);
-  if (!approver.rowCount) return "Назначьте одного согласующего";
-  await transaction(async (sql) => {
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.status === "idea" || unit.status === "pulled") return "Идею сначала делают единицей со слотом";
+    const ready = (unit.status === "work" && unit.gate === "none") ||
+      (unit.status === "fixes" && unit.gate === "returned");
+    if (!ready || !unit.slot_at || unit.outcome !== null) return transitionConflict;
+    if (!unit.content_type || !unit.account_id) return "Нужны вид контента и аккаунт";
+    const approver = await sql("select 1 from project_members where project_id = $1 and role = 'approver'", [projectId]);
+    if (!approver.rowCount) return "Назначьте одного согласующего";
     await sql("update units set status = 'review', gate = 'pending', return_reason = null where id = $1", [unitId]);
     await addEvent(sql, unitId, userId, "sent", `Версия ${unit.version}`, unit.version);
+    return null;
   });
-  return null;
 }
 
-export async function decide(projectId: string, userId: string, unitId: string, yes: boolean, reason: string) {
-  const unit = await getUnit(projectId, unitId);
-  if (!unit || unit.gate !== "pending") return "Эта версия не ждёт «да»";
+export async function decide(
+  projectId: string,
+  userId: string,
+  unitId: string,
+  expectedVersion: number,
+  yes: boolean,
+  reason: string,
+) {
   if (!yes && reason.trim().length < 2) return "Напишите, что вернуть";
-  await transaction(async (sql) => {
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.version !== expectedVersion || unit.status !== "review" || unit.gate !== "pending" || unit.outcome !== null) {
+      return transitionConflict;
+    }
     if (yes) {
       await sql(
         `update units set gate = 'yes', status = 'waiting', approved_version = version, approved_by = $2,
@@ -506,25 +542,23 @@ export async function decide(projectId: string, userId: string, unitId: string, 
       ]);
       await addEvent(sql, unitId, userId, "returned", reason.trim(), unit.version);
     }
+    return null;
   });
-  return null;
 }
 
 export async function markOutcome(
   projectId: string,
   userId: string,
   unitId: string,
+  expectedVersion: number,
   outcome: "out" | "failed",
   reason: string,
 ) {
-  const unit = await getUnit(projectId, unitId);
-  if (!unit) return "Единица не найдена";
-  if (unit.gate !== "yes" || unit.approved_version !== unit.version) {
-    return "Без «да» на текущей версии слот не публикуется";
-  }
-  if (!unit.slot_at) return "Нет слота";
+  if (outcome !== "out" && outcome !== "failed") return "Выберите результат публикации";
   if (outcome === "failed" && reason.trim().length < 2) return "Напишите, почему не вышло";
-  await transaction(async (sql) => {
+  return transaction(async (sql) => {
+    const unit = await lockUnit(sql, projectId, unitId);
+    if (!unit || unit.version !== expectedVersion || !canPublish(unit)) return transitionConflict;
     await sql(
       "update units set outcome = $2, outcome_reason = $3, status = $4 where id = $1",
       [unitId, outcome, outcome === "failed" ? reason.trim() : null, outcome === "out" ? "out" : "failed"],
@@ -537,14 +571,14 @@ export async function markOutcome(
       outcome === "failed" ? reason.trim() : "Отмечено вручную",
       unit.version,
     );
+    return null;
   });
-  return null;
 }
 
 export function latestComment(unit: Unit) {
   return unit.comments[unit.comments.length - 1]?.body ?? "";
 }
 
-export function canPublish(unit: Unit) {
-  return unit.gate === "yes" && unit.approved_version === unit.version && Boolean(unit.slot_at) && !unit.outcome;
+export function canPublish(unit: Pick<Unit, "status" | "gate" | "approved_version" | "version" | "slot_at" | "outcome">) {
+  return unit.status === "waiting" && unit.gate === "yes" && unit.approved_version === unit.version && Boolean(unit.slot_at) && unit.outcome === null;
 }

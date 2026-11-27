@@ -84,6 +84,7 @@ function Column({
               <form action={decideAction}>
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="unitId" value={unit.id} />
+                <input type="hidden" name="expectedVersion" value={unit.version} />
                 <input type="hidden" name="decision" value="yes" />
                 <input type="hidden" name="returnTo" value={`/projects/${projectId}/approve`} />
                 <button className="pri" type="submit">
@@ -93,6 +94,7 @@ function Column({
               <form className="stack tight" action={decideAction}>
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="unitId" value={unit.id} />
+                <input type="hidden" name="expectedVersion" value={unit.version} />
                 <input type="hidden" name="decision" value="no" />
                 <input type="hidden" name="returnTo" value={`/projects/${projectId}/approve`} />
                 <input name="reason" placeholder="Что вернуть" required />
