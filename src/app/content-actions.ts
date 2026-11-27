@@ -124,7 +124,11 @@ export async function changeSlotAction(formData: FormData) {
   const back = safeReturn(projectId, String(formData.get("returnTo") || ""), `/projects/${projectId}?unit=${unitId}`);
   const slotAt = parseSlot(String(formData.get("slot") || ""));
   if (!slotAt) withError(back, "Поставьте время слота");
-  const message = await changeSlot(projectId, user.id, unitId, slotAt);
+  const version = Number(formData.get("expectedVersion"));
+  const attempt = Number(formData.get("expectedPublicationAttempt"));
+  const intent = formData.get("rescheduleIntent");
+  if (intent !== "reschedule" && intent !== "retry") withError(back, "Обновите страницу для переноса слота");
+  const message = await changeSlot(projectId, user.id, unitId, slotAt, version, attempt, intent);
   if (message) withError(back, message);
   redirect(back);
 }
@@ -154,8 +158,11 @@ export async function decideAction(formData: FormData) {
   const { user, project } = await member(projectId);
   const back = safeReturn(projectId, String(formData.get("returnTo") || ""), `/projects/${projectId}/approve`);
   if (project.role !== "approver") withError(back, "«Да» говорит только согласующий");
-  const yes = formData.get("decision") === "yes";
-  const message = await decide(projectId, user.id, unitId, yes, String(formData.get("reason") || ""));
+  const version = Number(formData.get("expectedVersion"));
+  const round = Number(formData.get("expectedReviewRound"));
+  const decision = formData.get("decision");
+  if (decision !== "yes" && decision !== "no") withError(back, "Выберите решение");
+  const message = await decide(projectId, user.id, unitId, version, round, decision === "yes", String(formData.get("reason") || ""));
   if (message) withError(back, message);
   redirect(back);
 }
@@ -168,8 +175,11 @@ export async function markOutcomeAction(formData: FormData) {
   if (project.role !== "owner" && project.role !== "publisher") {
     withError(back, "Отметку ставит владелец или публикатор");
   }
-  const outcome = formData.get("outcome") === "failed" ? "failed" : "out";
-  const message = await markOutcome(projectId, user.id, unitId, outcome, String(formData.get("reason") || ""));
+  const version = Number(formData.get("expectedVersion"));
+  const attempt = Number(formData.get("expectedPublicationAttempt"));
+  const outcome = formData.get("outcome");
+  if (outcome !== "out" && outcome !== "failed") withError(back, "Выберите результат публикации");
+  const message = await markOutcome(projectId, user.id, unitId, version, attempt, outcome, String(formData.get("reason") || ""));
   if (message) withError(back, message);
   redirect(back);
 }

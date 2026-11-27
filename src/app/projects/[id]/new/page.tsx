@@ -1,7 +1,9 @@
+import { createUnitAction } from "@/app/content-actions";
 import { BrandShell } from "@/components/BrandShell";
 import { NewUnitForm } from "@/components/NewUnitForm";
 import { getUser } from "@/lib/auth";
 import { getUnit, listAccounts } from "@/lib/content";
+import { ideaFormValues } from "@/lib/idea-form";
 import { defaultSlotInput } from "@/lib/dates";
 import { getProjectForUser, listMembers } from "@/lib/projects";
 import { notFound, redirect } from "next/navigation";
@@ -34,6 +36,8 @@ export default async function NewUnitPage({
       </p>
       {error ? <div className="error">{error}</div> : null}
       <NewUnitForm
+        saveAction={createUnitAction}
+        key={idea?.id ?? "new"}
         projectId={id}
         members={members.map((member) => ({ user_id: member.user_id, name: member.name }))}
         accounts={accounts.map((account) => ({
@@ -43,11 +47,7 @@ export default async function NewUnitPage({
           kind: account.kind,
         }))}
         defaultSlot={defaultSlotInput()}
-        idea={
-          idea
-            ? { id: idea.id, title: idea.title, body: idea.body, people: idea.people.map((person) => person.user_id) }
-            : undefined
-        }
+        idea={idea ? ideaFormValues(idea) : undefined}
       />
     </BrandShell>
   );

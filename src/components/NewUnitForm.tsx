@@ -1,23 +1,25 @@
 "use client";
 
-import { createUnitAction } from "@/app/content-actions";
 import { contentTypes, personColor, platformLabel, tones, typeLabel } from "@/lib/catalog";
-import { useState } from "react";
+import { type ideaFormValues, updateTask } from "@/lib/idea-form";
+import React, { useState } from "react";
 
 type Member = { user_id: string; name: string };
 type Account = { id: string; platform: string; handle: string; kind: string };
 
 export function NewUnitForm({
+  saveAction,
   projectId,
   members,
   accounts,
   idea,
   defaultSlot,
 }: {
+  saveAction: (data: FormData) => Promise<void>;
   projectId: string;
   members: Member[];
   accounts: Account[];
-  idea?: { id: string; title: string; body: string; people: string[] };
+  idea?: ReturnType<typeof ideaFormValues>;
   defaultSlot: string;
 }) {
   const [title, setTitle] = useState(idea?.title ?? "");
@@ -25,8 +27,8 @@ export function NewUnitForm({
   const [type, setType] = useState<string>(contentTypes[0].id);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [people, setPeople] = useState<string[]>(idea?.people ?? []);
-  const [tasks, setTasks] = useState<Record<string, string>>({});
-  const [tone, setTone] = useState("sand");
+  const [tasks, setTasks] = useState<Record<string, string>>(idea?.tasks ?? {});
+  const [tone, setTone] = useState(idea?.tone ?? "sand");
   const account = accounts.find((item) => item.id === accountId);
   const names = members.filter((member) => people.includes(member.user_id)).map((member) => member.name);
 
@@ -35,7 +37,7 @@ export function NewUnitForm({
   }
 
   return (
-    <form className="composer" action={createUnitAction}>
+    <form className="composer" action={saveAction}>
       <input type="hidden" name="projectId" value={projectId} />
       {idea ? <input type="hidden" name="ideaId" value={idea.id} /> : null}
       <section>
@@ -102,7 +104,10 @@ export function NewUnitForm({
               name={`task-${id}`}
               value={tasks[id] ?? ""}
               placeholder="текст, ролик, выложить"
-              onChange={(event) => setTasks((current) => ({ ...current, [id]: event.target.value }))}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setTasks((current) => updateTask(current, id, value));
+              }}
             />
           </label>
         ))}
