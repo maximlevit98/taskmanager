@@ -16,9 +16,10 @@ services:
   app:
     build: .
     ports:
-      - "3010:3000"
+      - "127.0.0.1:3010:3000"
     environment:
       DATABASE_URL: postgres://content:content@db:5432/content
+      SESSION_MODE: local-http
       SESSION_SECRET: local-dev-session-secret
       HOSTNAME: 0.0.0.0
       PORT: 3000

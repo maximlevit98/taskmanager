@@ -79,6 +79,9 @@ jobs:
           npm ci
           node --test "${suites[@]}"
 
+      - name: Verify session startup, HTTP and HTTPS cookies
+        run: bash tests/session-environments.sh
+
       - name: Show service logs on failure
         if: failure()
         run: docker compose logs --no-color
