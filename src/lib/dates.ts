@@ -90,8 +90,9 @@ export function monthTitle(ym: string) {
 }
 
 export function parseSlot(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
-  const date = new Date(`${value}:00+03:00`);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+  const date = new Date(`${match[1]}:00+03:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
 }

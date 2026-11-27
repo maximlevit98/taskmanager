@@ -38,8 +38,9 @@ export async function BrandShell({
           </a>
         )}
         <nav>
+          <a href="/projects">Все проекты</a>
           {approverOnly ? (
-            <a className="on" href={`/projects/${projectId}/approve`}>
+            <a className={active === "approve" ? "on" : ""} href={`/projects/${projectId}/approve`}>
               Согласование
             </a>
           ) : (

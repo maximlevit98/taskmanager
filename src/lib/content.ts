@@ -281,15 +281,17 @@ export async function saveUnit(input: {
   const people = cleanPeople(input.people).filter((person) => input.memberIds.includes(person.userId));
   const body = input.body.trim();
 
+  const accountId = input.accountId || null;
   if (input.intent === "slot") {
     if (!isContentType(input.contentType)) return { error: "Выберите вид контента" };
-    if (!input.accountId) return { error: "Выберите аккаунт" };
     if (!input.slotAt) return { error: "Поставьте время слота" };
-    const account = await query("select 1 from accounts where id = $1 and project_id = $2", [
-      input.accountId,
-      input.projectId,
-    ]);
-    if (!account.rowCount) return { error: "Аккаунт не из этого проекта" };
+    if (accountId) {
+      const account = await query("select 1 from accounts where id = $1 and project_id = $2", [
+        accountId,
+        input.projectId,
+      ]);
+      if (!account.rowCount) return { error: "Аккаунт не из этого проекта" };
+    }
   }
 
   const id = await transaction(async (sql) => {
@@ -307,7 +309,7 @@ export async function saveUnit(input: {
           `update units set title = $2, body = $3, content_type = $4, account_id = $5, slot_at = $6,
                   tone = $7, status = 'work', gate = 'none'
            where id = $1`,
-          [unitId, title, body, input.contentType, input.accountId, input.slotAt, tone],
+          [unitId, title, body, input.contentType, accountId, input.slotAt, tone],
         );
       }
       await sql("delete from unit_people where unit_id = $1", [unitId]);
@@ -323,7 +325,7 @@ export async function saveUnit(input: {
         await sql(
           `insert into units (id, project_id, title, body, content_type, account_id, slot_at, tone, status, gate, created_by)
            values ($1, $2, $3, $4, $5, $6, $7, $8, 'work', 'none', $9)`,
-          [unitId, input.projectId, title, body, input.contentType, input.accountId, input.slotAt, tone, input.userId],
+          [unitId, input.projectId, title, body, input.contentType, accountId, input.slotAt, tone, input.userId],
         );
       }
       await addEvent(sql, unitId, input.userId, input.intent === "idea" ? "idea" : "created", "", 1);
