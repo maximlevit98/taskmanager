@@ -1,0 +1,80 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.16.0'
+
+      - name: Build and start app and PostgreSQL
+        run: |
+          cat > "$RUNNER_TEMP/compose.ci.yml" <<'YAML'
+          services:
+            db:
+              ports:
+                - "127.0.0.1::5432"
+          YAML
+          export COMPOSE_FILE="docker-compose.yml:$RUNNER_TEMP/compose.ci.yml"
+          echo "COMPOSE_FILE=$COMPOSE_FILE" >> "$GITHUB_ENV"
+          docker compose up --build --detach --wait --wait-timeout 120
+          address=$(docker compose port db 5432)
+          echo "DATABASE_URL=postgres://content:content@$address/content" >> "$GITHUB_ENV"
+
+      - name: Check login page on port 3010
+        run: |
+          status=$(curl --silent --show-error --fail --retry 12 --retry-connrefused --retry-delay 1 --max-time 10 \
+            --output "$RUNNER_TEMP/login.html" --write-out '%{http_code}' http://127.0.0.1:3010/login)
+          test "$status" = 200
+          grep -Fq 'name="password"' "$RUNNER_TEMP/login.html"
+
+      - name: Query PostgreSQL from the running app container
+        run: |
+          docker compose exec -T app node - <<'JS'
+          const { Client } = require('pg');
+          async function check() {
+            const db = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
+            await db.connect();
+            try {
+              const { rows } = await db.query('SELECT current_database() AS name');
+              if (rows[0].name !== 'content') throw new Error('Unexpected database');
+            } finally {
+              await db.end();
+            }
+          }
+          check().catch(error => { console.error(error); process.exitCode = 1; });
+          JS
+
+      - name: Run regression tests when present
+        run: |
+          shopt -s nullglob
+          suites=(tests/*.test.mjs)
+          if (( ${#suites[@]} == 0 )); then
+            echo '::notice::No tests/*.test.mjs files at this SHA. Only smoke checks ran.'
+            echo 'Regression tests were absent at this SHA.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npm ci
+          node --test "${suites[@]}"
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop services and remove test data
+        if: always()
+        run: docker compose down --volumes
