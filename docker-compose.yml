@@ -21,6 +21,9 @@ services:
       DATABASE_URL: postgres://content:content@db:5432/content
       SESSION_MODE: local-http
       SESSION_SECRET: local-dev-session-secret
+      INVITE_SMTP_URL: ${INVITE_SMTP_URL:-}
+      INVITE_FROM: ${INVITE_FROM:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3010}
       HOSTNAME: 0.0.0.0
       PORT: 3000
     depends_on:

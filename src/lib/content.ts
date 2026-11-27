@@ -1,5 +1,5 @@
 import type { Role } from "./auth";
-import { isContentType, isPlatform, isTone } from "./catalog";
+import { isContentType, isTone } from "./catalog";
 import { query, transaction, type Sql } from "./db";
 
 export type Person = { user_id: string; name: string; task: string };
@@ -216,42 +216,6 @@ async function addEvent(sql: Sql, unitId: string, userId: string, kind: string, 
     "insert into unit_events (id, unit_id, user_id, kind, note, version) values ($1, $2, $3, $4, $5, $6)",
     [crypto.randomUUID(), unitId, userId, kind, note, version],
   );
-}
-
-export async function createAccount(input: {
-  projectId: string;
-  platform: string;
-  handle: string;
-  kind: string;
-  ownerUserId: string | null;
-  connected: boolean;
-}) {
-  if (!isPlatform(input.platform)) return "Выберите площадку";
-  const handle = input.handle.trim();
-  if (handle.length < 1) return "Укажите аккаунт";
-  await query(
-    `insert into accounts (id, project_id, platform, handle, kind, owner_user_id, connected)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      crypto.randomUUID(),
-      input.projectId,
-      input.platform,
-      handle,
-      input.kind.trim(),
-      input.ownerUserId,
-      input.connected,
-    ],
-  );
-  return null;
-}
-
-export async function setAccountConnected(projectId: string, accountId: string, connected: boolean) {
-  const result = await query("update accounts set connected = $3 where id = $1 and project_id = $2", [
-    accountId,
-    projectId,
-    connected,
-  ]);
-  return result.rowCount ? null : "Аккаунт не найден";
 }
 
 function cleanPeople(people: { userId: string; task: string }[]) {

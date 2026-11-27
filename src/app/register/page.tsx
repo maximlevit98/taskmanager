@@ -5,13 +5,15 @@ import { redirect } from "next/navigation";
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  if (await getUser()) redirect("/projects");
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
+  const invited = next === "invites";
+  if (await getUser()) redirect(invited ? "/invites" : "/projects");
   return (
     <div className="auth">
       <form className="stack" action={registerAction}>
+        {invited && <input type="hidden" name="next" value="invites" />}
         <h1>Регистрация</h1>
         <p className="lead">После входа можно создать проект и собрать команду.</p>
         {error ? <div className="error">{error}</div> : null}
@@ -34,7 +36,7 @@ export default async function RegisterPage({
         <button className="pri" type="submit">
           Зарегистрироваться
         </button>
-        <a href="/login">Уже есть аккаунт</a>
+        <a href={invited ? "/login?next=invites" : "/login"}>Уже есть аккаунт</a>
       </form>
     </div>
   );

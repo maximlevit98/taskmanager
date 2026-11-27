@@ -22,7 +22,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost \
 export SESSION_SECRET
 SESSION_SECRET=$(openssl rand -hex 32)
 docker compose run -d --no-deps --name session-ci-app -p 127.0.0.1:3011:3000 \
-  -e SESSION_MODE=https -e SESSION_SECRET app
+  -e SESSION_MODE=https -e SESSION_SECRET -e APP_PUBLIC_URL=https://127.0.0.1:3443 app
 cat > "$tls_dir/default.conf" <<'NGINX'
 server {
   listen 127.0.0.1:3443 ssl;

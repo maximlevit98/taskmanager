@@ -110,6 +110,12 @@ create table if not exists project_invites (
   created_at timestamptz not null default now(),
   unique (project_id, email)
 );
+
+alter table project_invites
+  add column if not exists token_hash text,
+  add column if not exists expires_at timestamptz,
+  add column if not exists verified_user_id uuid references users(id) on delete cascade;
+create unique index if not exists project_invites_token_hash on project_invites (token_hash) where token_hash is not null;
 `;
 
 async function migrate() {

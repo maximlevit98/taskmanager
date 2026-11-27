@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { checkInviteDelivery } from "./invite-delivery.mjs";
 import { JSDOM } from "jsdom";
 
 const origin = new URL(process.argv[2]);
@@ -7,7 +8,7 @@ const secure = origin.protocol === "https:";
 
 async function submit(path, form, values, cookie) {
   const data = new FormData();
-  for (const input of form.querySelectorAll("input[name]")) {
+  for (const input of form.querySelectorAll("input[name], select[name]")) {
     data.set(input.name, values[input.name] ?? input.value);
   }
   return fetch(new URL(path, origin), {
@@ -40,6 +41,7 @@ const projects = await fetch(new URL("/projects", origin), { headers: { cookie }
 assert.equal(projects.status, 200);
 const document = new JSDOM(await projects.text()).window.document;
 assert.ok(document.body.textContent.includes(email));
+await checkInviteDelivery({ origin, cookie, submit, checkCookie });
 const logout = [...document.forms].find(item => item.textContent.includes("Выйти"));
 assert.ok(logout, "missing logout form");
 checkCookie(await submit("/projects", logout, {}, cookie), true);
