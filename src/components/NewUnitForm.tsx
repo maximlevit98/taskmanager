@@ -1,20 +1,21 @@
 "use client";
 
-import { createUnitAction } from "@/app/content-actions";
 import { contentTypes, personColor, platformLabel, tones, typeLabel } from "@/lib/catalog";
 import { type ideaFormValues, updateTask } from "@/lib/idea-form";
-import { useState } from "react";
+import React, { useState } from "react";
 
 type Member = { user_id: string; name: string };
 type Account = { id: string; platform: string; handle: string; kind: string };
 
 export function NewUnitForm({
+  saveAction,
   projectId,
   members,
   accounts,
   idea,
   defaultSlot,
 }: {
+  saveAction: (data: FormData) => Promise<void>;
   projectId: string;
   members: Member[];
   accounts: Account[];
@@ -36,7 +37,7 @@ export function NewUnitForm({
   }
 
   return (
-    <form className="composer" action={createUnitAction}>
+    <form className="composer" action={saveAction}>
       <input type="hidden" name="projectId" value={projectId} />
       {idea ? <input type="hidden" name="ideaId" value={idea.id} /> : null}
       <section>

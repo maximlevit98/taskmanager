@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ideaFormValues, updateTask } from "../src/lib/idea-form.ts";
+import { require as loadTsx } from "tsx/cjs/api";
+
+const { ideaFormValues, updateTask } = loadTsx("../src/lib/idea-form.ts", import.meta.url);
 
 const idea = {
   id: "idea-1",

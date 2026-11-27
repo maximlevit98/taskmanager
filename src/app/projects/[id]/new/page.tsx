@@ -1,3 +1,4 @@
+import { createUnitAction } from "@/app/content-actions";
 import { BrandShell } from "@/components/BrandShell";
 import { NewUnitForm } from "@/components/NewUnitForm";
 import { getUser } from "@/lib/auth";
@@ -35,6 +36,7 @@ export default async function NewUnitPage({
       </p>
       {error ? <div className="error">{error}</div> : null}
       <NewUnitForm
+        saveAction={createUnitAction}
         key={idea?.id ?? "new"}
         projectId={id}
         members={members.map((member) => ({ user_id: member.user_id, name: member.name }))}
