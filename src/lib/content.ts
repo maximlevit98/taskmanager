@@ -230,7 +230,6 @@ function cleanPeople(people: { userId: string; task: string }[]) {
 export async function saveUnit(input: {
   projectId: string;
   userId: string;
-  memberIds: string[];
   ideaId?: string;
   intent: "idea" | "slot";
   title: string;
@@ -244,7 +243,6 @@ export async function saveUnit(input: {
   const title = input.title.trim();
   if (title.length < 2) return { error: "Назовите единицу" };
   const tone = isTone(input.tone) ? input.tone : "sand";
-  const people = cleanPeople(input.people).filter((person) => input.memberIds.includes(person.userId));
   const body = input.body.trim();
 
   if (input.intent === "slot") {
@@ -259,6 +257,11 @@ export async function saveUnit(input: {
   }
 
   const id = await transaction(async (sql) => {
+    // Membership changes lock this same project. Keep the roster stable while replacing active assignments.
+    await sql("select id from projects where id = $1 for key share", [input.projectId]);
+    const members = await sql<{ user_id: string }>("select user_id from project_members where project_id = $1", [input.projectId]);
+    const memberIds = new Set(members.rows.map((member) => member.user_id));
+    const people = cleanPeople(input.people).filter((person) => memberIds.has(person.userId));
     let unitId = input.ideaId || "";
     if (unitId) {
       const existing = await sql<{ status: string }>(
@@ -276,7 +279,7 @@ export async function saveUnit(input: {
           [unitId, title, body, input.contentType, input.accountId, input.slotAt, tone],
         );
       }
-      await sql("delete from unit_people where unit_id = $1", [unitId]);
+      await sql("delete from unit_people where unit_id = $1 and user_id = any($2::uuid[])", [unitId, [...memberIds]]);
     } else {
       unitId = crypto.randomUUID();
       if (input.intent === "idea") {

@@ -14,10 +14,11 @@ export function AccountFields({ account, members, linked = false }: {
           <b>{platformLabel(account.platform)} · {account.handle}</b>
           <input type="hidden" name="platform" value={account.platform} />
           <input type="hidden" name="handle" value={account.handle} />
-          <p className="muted">Чтобы изменить площадку или адрес, перенесите связанные материалы на другой аккаунт.</p>
+          <p className="muted">Площадка и адрес закреплены за связанными материалами. Смена аккаунта в карточке снимает согласование и отметку о выходе. Для другого адреса добавьте отдельный аккаунт.</p>
         </div>
       ) : (
         <>
+          {account && <p className="muted">Связанных материалов нет. Изменённые площадка и адрес будут доступны при планировании новых слотов.</p>}
           <label>Площадка
             <select name="platform" defaultValue={account?.platform ?? "instagram"}>
               {platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.label}</option>)}

@@ -122,3 +122,37 @@ test("member management protects the owner, other memberships and the original a
   assert.equal((await query("select task from unit_people where unit_id=$1 and user_id=$2", [unit,a.member])).rows[0].task, "Test task");
   assert.equal((await query("select 1 from users where id=$1", [a.member])).rowCount, 1);
 });
+
+test("archived assignments survive stale idea submissions and promotion", async () => {
+  const a = await fixture(), stranger = randomUUID();
+  const { saveUnit } = loadTs("../src/lib/content.ts", import.meta.url);
+  const draft = {
+    projectId: a.project, userId: a.owner, intent: "idea", title: "Test idea", body: "",
+    contentType: "ig-post", accountId: a.account, slotAt: null, tone: "mint",
+    people: [{ userId: a.member, task: "Former task" }, { userId: a.owner, task: "Original" }],
+  };
+  const { id } = await saveUnit(draft);
+  assert.ok(id);
+  assert.equal(await api.updateMember(a.project, a.owner, a.member, null), null);
+  const stalePeople = [{ userId: a.member, task: "Overwrite" }, { userId: stranger, task: "Inject" }];
+  const assignments = async () => Object.fromEntries((await query(
+    "select user_id, task from unit_people where unit_id = $1", [id],
+  )).rows.map((person) => [person.user_id, person.task]));
+  assert.deepEqual(await saveUnit({ ...draft, ideaId: id, people: [...stalePeople, { userId: a.owner, task: "Edited" }] }), { id });
+  assert.deepEqual(await assignments(), { [a.owner]: "Edited", [a.member]: "Former task" });
+  assert.deepEqual(await saveUnit({ ...draft, ideaId: id, intent: "slot", slotAt: "2026-12-01T10:00:00Z", people: [] }), { id });
+  assert.deepEqual(await assignments(), { [a.member]: "Former task" });
+  assert.equal((await query("select status from units where id = $1", [id])).rows[0].status, "work");
+});
+
+test("published account identity is protected and disconnecting preserves the publication", async () => {
+  const a = await fixture();
+  const unit = await material(a);
+  await query("update units set status='out', outcome='out' where id=$1", [unit]);
+  assert.match(await api.deleteAccount(a.project, a.owner, a.account), /Отключите/);
+  assert.match(await api.saveAccount(a.project, a.owner, a.account, { ...fields, handle: "@new" }), /Отключите/);
+  assert.equal(await api.saveAccount(a.project, a.owner, a.account, fields), null);
+  assert.deepEqual((await query(
+    "select account_id, approved_version, status, outcome from units where id=$1", [unit],
+  )).rows[0], { account_id: a.account, approved_version: 1, status: "out", outcome: "out" });
+});

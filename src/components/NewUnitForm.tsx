@@ -97,6 +97,14 @@ export function NewUnitForm({
             );
           })}
         </div>
+        {idea && idea.archived.length > 0 && (
+          <section aria-label="Архивные поручения">
+            <h3>Архивные поручения</h3>
+            <ul>{idea.archived.map((person) => (
+              <li key={person.user_id}>{person.name} — {person.task || "Без поручения"}</li>
+            ))}</ul>
+          </section>
+        )}
         {people.map((id) => (
           <label key={id} className="task-line">
             Задача · {members.find((member) => member.user_id === id)?.name}
