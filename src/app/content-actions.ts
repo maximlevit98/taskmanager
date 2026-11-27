@@ -5,14 +5,12 @@ import { getUser } from "@/lib/auth";
 import {
   addComment,
   changeSlot,
-  createAccount,
   decide,
   markOutcome,
   saveCompose,
   saveLink,
   saveUnit,
   sendForApproval,
-  setAccountConnected,
   withdrawIdea,
 } from "@/lib/content";
 import { parseSlot } from "@/lib/dates";
@@ -182,33 +180,4 @@ export async function markOutcomeAction(formData: FormData) {
   const message = await markOutcome(projectId, user.id, unitId, version, attempt, outcome, String(formData.get("reason") || ""));
   if (message) withError(back, message);
   redirect(back);
-}
-
-export async function addAccountAction(formData: FormData) {
-  const projectId = String(formData.get("projectId") || "");
-  await team(projectId);
-  const owner = String(formData.get("ownerUserId") || "");
-  const members = await listMembers(projectId);
-  const message = await createAccount({
-    projectId,
-    platform: String(formData.get("platform") || ""),
-    handle: String(formData.get("handle") || ""),
-    kind: String(formData.get("kind") || ""),
-    ownerUserId: members.some((item) => item.user_id === owner) ? owner : null,
-    connected: formData.get("connected") === "on",
-  });
-  if (message) withError(`/projects/${projectId}/connections`, message);
-  redirect(`/projects/${projectId}/connections`);
-}
-
-export async function toggleAccountAction(formData: FormData) {
-  const projectId = String(formData.get("projectId") || "");
-  await team(projectId);
-  const message = await setAccountConnected(
-    projectId,
-    String(formData.get("accountId") || ""),
-    formData.get("connected") === "yes",
-  );
-  if (message) withError(`/projects/${projectId}/connections`, message);
-  redirect(`/projects/${projectId}/connections`);
 }
