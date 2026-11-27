@@ -58,8 +58,8 @@ async function pending() {
   );
   return id;
 }
-const decide = (id, version, yes) => api.decide(project, actor, id, version, yes, yes ? "" : "Исправить");
-const publish = (id, version, outcome = "out") => api.markOutcome(project, actor, id, version, outcome, "Ошибка");
+const decide = (id, version, yes, round = 1) => api.decide(project, actor, id, version, round, yes, yes ? "" : "Исправить");
+const publish = (id, version, outcome = "out", attempt = 1) => api.markOutcome(project, actor, id, version, attempt, outcome, "Ошибка");
 const edit = (id) => api.saveCompose(project, actor, id, { body: "Исправленный текст" });
 async function state(id) {
   return (await query("select version,gate,status,outcome,approved_version from units where id=$1", [id])).rows[0];
@@ -113,9 +113,9 @@ test("old review and publication forms cannot act on a resubmitted version", asy
   assert.equal(await decide(id, 1, true), null);
   assert.equal(await api.saveLink(project, actor, id, "https://example.org/revision", ""), null);
   assert.equal(await api.sendForApproval(project, actor, id), null);
-  assert.match(await decide(id, 1, true), /Обновите страницу/);
-  assert.match(await decide(id, 1, false), /Обновите страницу/);
-  assert.equal(await decide(id, 2, true), null);
+  assert.match(await decide(id, 1, true, 2), /Обновите страницу/);
+  assert.match(await decide(id, 1, false, 2), /Обновите страницу/);
+  assert.equal(await decide(id, 2, true, 2), null);
   assert.match(await publish(id, 1), /Обновите страницу/);
   assert.equal(await publish(id, 2, "failed"), null);
   assert.match(await publish(id, 2), /Обновите страницу/);
@@ -154,7 +154,7 @@ test("publication requires a waiting, approved, scheduled version and a valid ou
   assert.match(await publish(id, 1), /Обновите страницу/);
   assert.equal(await decide(id, 1, true), null);
   assert.match(await publish(id, 1, "unknown"), /Выберите результат/);
-  assert.match(await api.markOutcome(project, actor, id, 1, "failed", ""), /почему/);
+  assert.match(await api.markOutcome(project, actor, id, 1, 1, "failed", ""), /почему/);
   for (const invalid of ["status='review'", "gate='none'", "approved_version=0", "slot_at=null"]) {
     await query("update units set status='waiting',gate='yes',approved_version=1,slot_at=now() where id=$1", [id]);
     await query("update units set " + invalid + " where id=$1", [id]);
@@ -171,4 +171,44 @@ test("competing publication outcomes record exactly one event", async () => {
   assert.match(loser, /Обновите страницу/);
   assert.equal((await state(id)).outcome, "out");
   assert.deepEqual(await events(id), [{ kind: "approved", version: 1 }, { kind: "published", version: 1 }]);
+});
+
+test("each submission rejects decisions from earlier rounds even when the content is unchanged", async () => {
+  const id = await pending();
+  for (const round of [1, 2]) {
+    assert.equal(await decide(id, 1, false, round), null);
+    assert.equal(await api.sendForApproval(project, actor, id), null);
+    for (let stale = 1; stale <= round; stale++) {
+      assert.match(await decide(id, 1, true, stale), /Обновите страницу/);
+      assert.match(await decide(id, 1, false, stale), /Обновите страницу/);
+    }
+  }
+  assert.equal(await decide(id, 1, true, 3), null);
+  assert.deepEqual((await events(id)).map(e => e.kind), ["returned", "sent", "returned", "sent", "approved"]);
+  assert.equal((await state(id)).approved_version, 1);
+});
+
+test("reschedules invalidate old publication forms even after failure or a return to the original slot", async () => {
+  const id = await pending();
+  const original = "2030-01-03T12:00:00Z";
+  const later = "2030-01-04T12:00:00Z";
+  await query("update units set slot_at=$2 where id=$1", [id, original]);
+  assert.equal(await decide(id, 1, true), null);
+
+  assert.equal(await api.changeSlot(project, actor, id, later), null);
+  assert.match(await publish(id, 1, "out", 1), /Обновите страницу/);
+  assert.equal(await publish(id, 1, "failed", 2), null);
+  assert.equal(await api.changeSlot(project, actor, id, original), null);
+
+  for (const stale of [1, 2]) {
+    for (const outcome of ["out", "failed"]) {
+      assert.match(await publish(id, 1, outcome, stale), /Обновите страницу/);
+    }
+  }
+  const row = await state(id);
+  assert.equal(row.version, 1);
+  assert.equal(row.approved_version, 1);
+  assert.equal(row.outcome, null);
+  assert.equal(await publish(id, 1, "out", 3), null);
+  assert.deepEqual((await events(id)).map(e => e.kind), ["approved", "rescheduled", "failed", "rescheduled", "published"]);
 });

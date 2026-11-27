@@ -65,6 +65,10 @@ create table if not exists units (
   created_at timestamptz not null default now()
 );
 
+alter table units
+  add column if not exists review_round integer not null default 1,
+  add column if not exists publication_attempt integer not null default 1;
+
 create table if not exists unit_people (
   unit_id uuid not null references units(id) on delete cascade,
   user_id uuid not null references users(id) on delete cascade,

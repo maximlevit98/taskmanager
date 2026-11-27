@@ -155,9 +155,10 @@ export async function decideAction(formData: FormData) {
   const back = safeReturn(projectId, String(formData.get("returnTo") || ""), `/projects/${projectId}/approve`);
   if (project.role !== "approver") withError(back, "«Да» говорит только согласующий");
   const version = Number(formData.get("expectedVersion"));
+  const round = Number(formData.get("expectedReviewRound"));
   const decision = formData.get("decision");
   if (decision !== "yes" && decision !== "no") withError(back, "Выберите решение");
-  const message = await decide(projectId, user.id, unitId, version, decision === "yes", String(formData.get("reason") || ""));
+  const message = await decide(projectId, user.id, unitId, version, round, decision === "yes", String(formData.get("reason") || ""));
   if (message) withError(back, message);
   redirect(back);
 }
@@ -171,9 +172,10 @@ export async function markOutcomeAction(formData: FormData) {
     withError(back, "Отметку ставит владелец или публикатор");
   }
   const version = Number(formData.get("expectedVersion"));
+  const attempt = Number(formData.get("expectedPublicationAttempt"));
   const outcome = formData.get("outcome");
   if (outcome !== "out" && outcome !== "failed") withError(back, "Выберите результат публикации");
-  const message = await markOutcome(projectId, user.id, unitId, version, outcome, String(formData.get("reason") || ""));
+  const message = await markOutcome(projectId, user.id, unitId, version, attempt, outcome, String(formData.get("reason") || ""));
   if (message) withError(back, message);
   redirect(back);
 }

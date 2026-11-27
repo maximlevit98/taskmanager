@@ -183,6 +183,7 @@ export function UnitPanel({
             <form action={markOutcomeAction}>
               {hidden}
               <input type="hidden" name="expectedVersion" value={unit.version} />
+              <input type="hidden" name="expectedPublicationAttempt" value={unit.publication_attempt} />
               <input type="hidden" name="outcome" value="out" />
               <button className="pri" type="submit">
                 Вышло
@@ -191,6 +192,7 @@ export function UnitPanel({
             <form className="stack tight" action={markOutcomeAction}>
               {hidden}
               <input type="hidden" name="expectedVersion" value={unit.version} />
+              <input type="hidden" name="expectedPublicationAttempt" value={unit.publication_attempt} />
               <input type="hidden" name="outcome" value="failed" />
               <input name="reason" placeholder="Почему не вышло" required />
               <button className="sec" type="submit">
