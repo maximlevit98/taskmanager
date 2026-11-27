@@ -53,6 +53,13 @@ for (const intent of ["idea", "slot"]) {
     assert.deepEqual(new FormData(form).getAll("person"), ["editor", "artist"]);
     assert.match(form.querySelector('[aria-label="Архивные поручения"]').textContent, /Катя — Собрать исходники/);
     assert.equal(form.elements.namedItem("task-former"), null);
+    assert.deepEqual(new FormData(form).getAll("initialPerson"), ["editor", "artist"]);
+    const artist = form.querySelector('input[type="checkbox"][value="artist"]');
+    await act(async () => artist.click());
+    const unchecked = new FormData(form);
+    assert.deepEqual(unchecked.getAll("initialPerson"), ["editor", "artist"]);
+    assert.deepEqual(unchecked.getAll("person"), ["editor"]);
+    await act(async () => artist.click());
     assert.equal(editorTask.value, "Написать анонс");
     assert.equal(form.elements.namedItem("task-artist").value, "Нарисовать обложку");
 

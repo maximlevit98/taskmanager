@@ -66,6 +66,7 @@ export async function createUnitAction(formData: FormData) {
     slotAt: intent === "slot" ? parseSlot(String(formData.get("slot") || "")) : null,
     tone: String(formData.get("tone") || "sand"),
     people,
+    initialPeople: formData.getAll("initialPerson").map(String),
   });
   if ("error" in result) withError(failTo, result.error || "Не получилось сохранить");
   if (intent === "idea") redirect(`/projects/${projectId}/ideas`);
