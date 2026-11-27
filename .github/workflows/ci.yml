@@ -37,10 +37,18 @@ jobs:
 
       - name: Check login page on port 3010
         run: |
-          status=$(curl --silent --show-error --fail --retry 12 --retry-connrefused --retry-delay 1 --max-time 10 \
-            --output "$RUNNER_TEMP/login.html" --write-out '%{http_code}' http://127.0.0.1:3010/login)
-          test "$status" = 200
-          grep -Fq 'name="password"' "$RUNNER_TEMP/login.html"
+          page="$RUNNER_TEMP/login.html"
+          for attempt in {1..12}; do
+            if status=$(curl --silent --show-error --max-time 5 --output "$page" \
+                --write-out '%{http_code}' http://127.0.0.1:3010/login) &&
+                [[ "$status" == 200 ]] && grep -Fq 'name="password"' "$page"; then
+              exit 0
+            fi
+            echo "Login page not ready (attempt $attempt/12, HTTP $status)"
+            if (( attempt < 12 )); then sleep 1; fi
+          done
+          echo '::error::Login page did not return HTTP 200 with a password field'
+          exit 1
 
       - name: Query PostgreSQL from the running app container
         run: |
