@@ -30,6 +30,8 @@ export type Unit = {
   status: string;
   gate: string;
   version: number;
+  review_round: number;
+  publication_attempt: number;
   approved_version: number | null;
   approved_by: string | null;
   approved_at: string | null;
@@ -86,7 +88,7 @@ export async function listUnits(projectId: string): Promise<Unit[]> {
   const units = await query<UnitRow>(
     `select u.id, u.project_id, u.title, u.body, u.content_type, u.account_id,
             a.platform, a.handle, a.kind, a.connected,
-            u.slot_at, u.tone, u.status, u.gate, u.version, u.approved_version,
+            u.slot_at, u.tone, u.status, u.gate, u.version, u.review_round, u.publication_attempt, u.approved_version,
             u.approved_by, u.approved_at, u.return_reason, u.outcome, u.outcome_reason,
             u.created_by, u.created_at
      from units u
@@ -354,13 +356,13 @@ const transitionConflict = "Версия или состояние матери�
 
 type LockedUnit = Pick<Unit,
   "title" | "body" | "content_type" | "account_id" | "version" | "gate" |
-  "status" | "outcome" | "approved_version" | "slot_at"
+  "status" | "outcome" | "approved_version" | "slot_at" | "review_round" | "publication_attempt"
 >;
 
 async function lockUnit(sql: Sql, projectId: string, unitId: string) {
   const result = await sql<LockedUnit>(
     `select title, body, content_type, account_id, version, gate, status, outcome,
-            approved_version, slot_at::text
+            approved_version, slot_at::text, review_round, publication_attempt
      from units where project_id = $1 and id = $2 for update`,
     [projectId, unitId],
   );
@@ -475,7 +477,7 @@ export async function changeSlot(projectId: string, userId: string, unitId: stri
     const failed = unit.outcome === "failed";
     const nextStatus = unit.gate === "yes" ? "waiting" : unit.status;
     await sql(
-      `update units set slot_at = $2,
+      `update units set slot_at = $2, publication_attempt = publication_attempt + 1,
               outcome = case when $3 then null else outcome end,
               outcome_reason = case when $3 then null else outcome_reason end,
               status = case when $3 then $4 else status end
@@ -507,7 +509,11 @@ export async function sendForApproval(projectId: string, userId: string, unitId:
     if (!unit.content_type || !unit.account_id) return "Нужны вид контента и аккаунт";
     const approver = await sql("select 1 from project_members where project_id = $1 and role = 'approver'", [projectId]);
     if (!approver.rowCount) return "Назначьте одного согласующего";
-    await sql("update units set status = 'review', gate = 'pending', return_reason = null where id = $1", [unitId]);
+    await sql(
+      `update units set status = 'review', gate = 'pending', return_reason = null,
+              review_round = review_round + 1 where id = $1`,
+      [unitId],
+    );
     await addEvent(sql, unitId, userId, "sent", `Версия ${unit.version}`, unit.version);
     return null;
   });
@@ -518,13 +524,15 @@ export async function decide(
   userId: string,
   unitId: string,
   expectedVersion: number,
+  expectedReviewRound: number,
   yes: boolean,
   reason: string,
 ) {
   if (!yes && reason.trim().length < 2) return "Напишите, что вернуть";
   return transaction(async (sql) => {
     const unit = await lockUnit(sql, projectId, unitId);
-    if (!unit || unit.version !== expectedVersion || unit.status !== "review" || unit.gate !== "pending" || unit.outcome !== null) {
+    if (!unit || unit.version !== expectedVersion || unit.review_round !== expectedReviewRound ||
+        unit.status !== "review" || unit.gate !== "pending" || unit.outcome !== null) {
       return transitionConflict;
     }
     if (yes) {
@@ -551,6 +559,7 @@ export async function markOutcome(
   userId: string,
   unitId: string,
   expectedVersion: number,
+  expectedPublicationAttempt: number,
   outcome: "out" | "failed",
   reason: string,
 ) {
@@ -558,7 +567,9 @@ export async function markOutcome(
   if (outcome === "failed" && reason.trim().length < 2) return "Напишите, почему не вышло";
   return transaction(async (sql) => {
     const unit = await lockUnit(sql, projectId, unitId);
-    if (!unit || unit.version !== expectedVersion || !canPublish(unit)) return transitionConflict;
+    if (!unit || unit.version !== expectedVersion || unit.publication_attempt !== expectedPublicationAttempt || !canPublish(unit)) {
+      return transitionConflict;
+    }
     await sql(
       "update units set outcome = $2, outcome_reason = $3, status = $4 where id = $1",
       [unitId, outcome, outcome === "failed" ? reason.trim() : null, outcome === "out" ? "out" : "failed"],
