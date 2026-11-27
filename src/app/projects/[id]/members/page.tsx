@@ -1,12 +1,11 @@
 import {
-  addParticipantAction,
-  cancelInviteAction,
   changeRoleAction,
   removeMemberAction,
 } from "@/app/actions";
+import { ProjectInvites } from "@/components/ProjectInvites";
 import { BrandShell } from "@/components/BrandShell";
 import { assignableRoles, getUser, roleLabel } from "@/lib/auth";
-import { getProjectForUser, listInvites, listMembers } from "@/lib/projects";
+import { getProjectForUser, listMembers } from "@/lib/projects";
 import { notFound, redirect } from "next/navigation";
 
 export default async function MembersPage({
@@ -24,7 +23,6 @@ export default async function MembersPage({
   if (!project) notFound();
   if (project.role === "approver") redirect(`/projects/${id}/approve`);
   const members = await listMembers(id);
-  const invites = await listInvites(id);
   const owner = project.role === "owner";
   const approver = members.find((member) => member.role === "approver");
 
@@ -91,59 +89,7 @@ export default async function MembersPage({
         </tbody>
       </table>
 
-      {owner ? (
-        <>
-          <h2>Добавить участника</h2>
-          <form className="stack" action={addParticipantAction}>
-            <input type="hidden" name="projectId" value={id} />
-            <label>
-              Почта
-              <input name="email" type="email" placeholder="anya@brand.ru" required />
-            </label>
-            <label>
-              Роль
-              <select name="role" defaultValue="member">
-                {assignableRoles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.label} — {role.hint}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="pri" type="submit">
-              Добавить
-            </button>
-            <p className="muted">Если почты ещё нет в системе, человек получит проект сразу после регистрации.</p>
-          </form>
-        </>
-      ) : null}
-
-      {owner && invites.length > 0 ? (
-        <>
-          <h2>Ждут регистрацию</h2>
-          <table className="table">
-            <tbody>
-              {invites.map((invite) => (
-                <tr key={invite.id}>
-                  <td>
-                    <b>{invite.email}</b>
-                    <div className="muted">{roleLabel(invite.role)}</div>
-                  </td>
-                  <td>
-                    <form action={cancelInviteAction}>
-                      <input type="hidden" name="projectId" value={id} />
-                      <input type="hidden" name="inviteId" value={invite.id} />
-                      <button className="sec" type="submit">
-                        Отменить
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      ) : null}
+      {owner && <ProjectInvites projectId={id} />}
     </BrandShell>
   );
 }
