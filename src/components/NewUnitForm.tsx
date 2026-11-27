@@ -40,6 +40,7 @@ export function NewUnitForm({
     <form className="composer" action={saveAction}>
       <input type="hidden" name="projectId" value={projectId} />
       {idea ? <input type="hidden" name="ideaId" value={idea.id} /> : null}
+      {idea?.people.map((id) => <input key={id} type="hidden" name="initialPerson" value={id} />)}
       <section>
         <h2>1 · Название</h2>
         <input name="title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="О чём единица" required />
@@ -97,6 +98,14 @@ export function NewUnitForm({
             );
           })}
         </div>
+        {idea && idea.archived.length > 0 && (
+          <section aria-label="Архивные поручения">
+            <h3>Архивные поручения</h3>
+            <ul>{idea.archived.map((person) => (
+              <li key={person.user_id}>{person.name} — {person.task || "Без поручения"}</li>
+            ))}</ul>
+          </section>
+        )}
         {people.map((id) => (
           <label key={id} className="task-line">
             Задача · {members.find((member) => member.user_id === id)?.name}

@@ -23,13 +23,16 @@ export default async function ProjectsPage({
       <div className="list">
         {projects.length === 0 ? <p className="muted">Пока нет ни одного проекта.</p> : null}
         {projects.map((project) => (
-          <a className="card" key={project.project_id} href={`/projects/${project.project_id}`}>
+          <div className="card project-row" key={project.project_id}>
             <span>
-              <b>{project.project_name}</b>
+              <a href={`/projects/${project.project_id}`}><b>{project.project_name}</b></a>
               <span>{roleLabel(project.role)}</span>
             </span>
-            <span>открыть</span>
-          </a>
+            <div className="actions">
+              {project.role === "owner" ? <a href={`/projects/${project.project_id}/settings`}>Настройки</a> : null}
+              <a href={`/projects/${project.project_id}`}>Открыть</a>
+            </div>
+          </div>
         ))}
       </div>
     </Shell>

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getUser, isAssignableRole } from "@/lib/auth";
+import { getUser } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { isUniqueViolation, query } from "@/lib/db";
 import { acceptInvites, addParticipant, createProject, getProjectForUser } from "@/lib/projects";
@@ -85,46 +85,6 @@ export async function addParticipantAction(formData: FormData) {
     String(formData.get("role") || ""),
   );
   if (message) back(`/projects/${projectId}/members`, message);
-  redirect(`/projects/${projectId}/members`);
-}
-
-export async function changeRoleAction(formData: FormData) {
-  const projectId = String(formData.get("projectId") || "");
-  const userId = String(formData.get("userId") || "");
-  const role = String(formData.get("role") || "");
-  await ownerProject(projectId);
-  if (!isAssignableRole(role)) back(`/projects/${projectId}/members`, "Выберите роль");
-  const target = await query<{ role: string }>(
-    "select role from project_members where project_id = $1 and user_id = $2",
-    [projectId, userId],
-  );
-  if (!target.rows[0]) back(`/projects/${projectId}/members`, "Участник не найден");
-  if (target.rows[0].role === "owner") back(`/projects/${projectId}/members`, "Роль владельца не меняется");
-  try {
-    await query(
-      "update project_members set role = $3 where project_id = $1 and user_id = $2",
-      [projectId, userId, role],
-    );
-  } catch (error) {
-    if (isUniqueViolation(error)) back(`/projects/${projectId}/members`, "Согласующий в проекте уже назначен");
-    throw error;
-  }
-  redirect(`/projects/${projectId}/members`);
-}
-
-export async function removeMemberAction(formData: FormData) {
-  const projectId = String(formData.get("projectId") || "");
-  const userId = String(formData.get("userId") || "");
-  await ownerProject(projectId);
-  const target = await query<{ role: string }>(
-    "select role from project_members where project_id = $1 and user_id = $2",
-    [projectId, userId],
-  );
-  if (target.rows[0]?.role === "owner") back(`/projects/${projectId}/members`, "Владельца нельзя убрать");
-  await query("delete from project_members where project_id = $1 and user_id = $2", [
-    projectId,
-    userId,
-  ]);
   redirect(`/projects/${projectId}/members`);
 }
 

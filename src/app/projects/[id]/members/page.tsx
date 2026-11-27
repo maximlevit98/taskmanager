@@ -1,9 +1,8 @@
 import {
   addParticipantAction,
   cancelInviteAction,
-  changeRoleAction,
-  removeMemberAction,
 } from "@/app/actions";
+import { changeRoleAction, removeMemberAction } from "@/app/resource-actions";
 import { BrandShell } from "@/components/BrandShell";
 import { assignableRoles, getUser, roleLabel } from "@/lib/auth";
 import { getProjectForUser, listInvites, listMembers } from "@/lib/projects";
@@ -26,26 +25,16 @@ export default async function MembersPage({
   const members = await listMembers(id);
   const invites = await listInvites(id);
   const owner = project.role === "owner";
-  const approver = members.find((member) => member.role === "approver");
 
   return (
     <BrandShell projectId={id} active="members">
       <h1>Участники</h1>
-      <p className="lead">Ваша роль: {roleLabel(project.role)}. Согласующий в проекте один.</p>
+      <p className="lead">Ваша роль в проекте — {roleLabel(project.role)}.</p>
       {error ? <div className="error">{error}</div> : null}
-      <div className="note">
-        {approver
-          ? `${approver.name} согласует. Без этого «да» слот не публикуется. Дальше — единица контента.`
-          : "Назначьте одного согласующего. Без его «да» слот не публикуется."}
-        <p className="actions">
-          <a className="pri" href={`/projects/${id}/new`}>
-            Новая единица
-          </a>
-          <a className="sec" href={`/projects/${id}`}>
-            Календарь
-          </a>
-        </p>
-      </div>
+      <p className="actions">
+        <a className="pri" href={`/projects/${id}/new`}>Новая единица</a>
+        <a className="sec" href={`/projects/${id}`}>Календарь</a>
+      </p>
 
       <table className="table">
         <tbody>
@@ -60,8 +49,8 @@ export default async function MembersPage({
                   <form className="inline" action={changeRoleAction}>
                     <input type="hidden" name="projectId" value={id} />
                     <input type="hidden" name="userId" value={member.user_id} />
-                    <select name="role" defaultValue={member.role}>
-                      {assignableRoles.map((role) => (
+                    <select name="role" aria-label={`Роль ${member.name}`} defaultValue={member.role}>
+                      {assignableRoles.filter((role) => role.id !== "approver" || member.role === "approver").map((role) => (
                         <option key={role.id} value={role.id}>
                           {role.label}
                         </option>
@@ -77,13 +66,18 @@ export default async function MembersPage({
               </td>
               <td>
                 {owner && member.role !== "owner" ? (
-                  <form action={removeMemberAction}>
-                    <input type="hidden" name="projectId" value={id} />
-                    <input type="hidden" name="userId" value={member.user_id} />
-                    <button className="sec" type="submit">
-                      Убрать
-                    </button>
-                  </form>
+                  <details className="resource-details">
+                    <summary>Убрать из проекта</summary>
+                    <p>{member.name} потеряет доступ к проекту. Учётная запись, поручения и история останутся.
+                      Для аккаунтов этого сотрудника потребуется выбрать другого ответственного.</p>
+                    <form action={removeMemberAction}>
+                      <input type="hidden" name="projectId" value={id} />
+                      <input type="hidden" name="userId" value={member.user_id} />
+                      <button className="sec" type="submit">
+                        Убрать из проекта
+                      </button>
+                    </form>
+                  </details>
                 ) : null}
               </td>
             </tr>
