@@ -57,7 +57,8 @@ export function NewUnitForm({
         <h2>3 · На какой аккаунт</h2>
         {accounts.length === 0 ? (
           <p className="muted">
-            Аккаунтов ещё нет. <a href={`/projects/${projectId}/connections`}>Добавьте подключение</a>, иначе в календарь не поставить.
+            Аккаунта пока нет — слот встанет по виду контента.{" "}
+            <a href={`/projects/${projectId}/connections`}>Подключение</a> можно добавить позже.
           </p>
         ) : (
           <div className="chips">
@@ -135,7 +136,7 @@ export function NewUnitForm({
         </div>
       </div>
       <div className="actions">
-        <button className="pri" name="intent" value="slot" type="submit" disabled={accounts.length === 0}>
+        <button className="pri" name="intent" value="slot" type="submit">
           Поставить в календарь
         </button>
         <button className="sec" name="intent" value="idea" type="submit">
